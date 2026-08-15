@@ -4,26 +4,33 @@
 
 每天自动盯网易云**新歌榜**，给每首新歌打一个 0-100 的**爆款潜力分**。全开源、零训练成本冷启动、数据攒够后自动升级为机器学习模型打分。
 
+线上榜：https://jiangliushi666.github.io/ncm-song-scorer/
+
 > 开工文档与完整设计见 [KICKOFF.md](KICKOFF.md)，端点实测记录见 [docs/API_ENDPOINTS.md](docs/API_ENDPOINTS.md)。
 
 ## 工作原理
 
 ```
-新歌榜(每日100首) ──▶ 入库跟踪 ──▶ 每日快照(评论总数/热度pop) ──▶ 特征工程
-                                                                      │
-              排名表 Top N ◀── 打分(启发式 或 ML概率分) ◀────────────┘
+新歌榜(每日100首) ──▶ 入库跟踪 ──▶ 歌手邻域近作(未上榜负样本)
+                                      │
+每日快照(评论总数/热度pop) ──▶ 特征工程 ──▶ 打分(heuristic-v2 或 ML)
+                                      │
+                              排名表 / GitHub Pages
 ```
 
-**启发式分数**由四个分项加权（冷启动即可用）：
+**启发式分数 heuristic-v2**（冷启动即可用）：
 
 | 分项 | 权重 | 说明 |
 |---|---|---|
-| 早期讨论密度 | 40% | 评论总数 ÷ 发行天数（log 压缩） |
-| 平台热度值 | 25% | 官方 pop 字段（0-100） |
-| 评论增速 | 20% | 相邻快照差分得出的每小时评论增量 |
-| 歌手资历 | 15% | 专辑数 + 单曲数（log 压缩） |
+| 早期讨论密度 | 36% | 评论总数 ÷ 发行天数（log 压缩） |
+| 平台热度值 | 22% | 官方 pop 字段（0-100） |
+| 评论增速 | 18% | 相邻快照差分得出的每小时评论增量 |
+| 歌手资历 | 12% | 专辑数 + 单曲数（log 压缩） |
+| 歌手上榜热 | 12% | 主歌手近 90 天其他歌曲的上榜天数（同日不计） |
 
-**ML 分数**：以「发布 14 天内进入新歌榜」为标签训练 GradientBoosting，特征只取首日快照（防标签泄漏）。攒 2-3 周数据后执行 `train` 即可。
+歌名判定为 Live / 现场 / 翻唱时，总分再乘 0.78，避免综艺回放压过原创新歌。
+
+**ML 分数**：以「新歌榜最佳名次 ≤ 20」为标签训练 GradientBoosting，特征只取首日快照（防标签泄漏）。未上榜的邻域近作是负样本来源。攒 2-3 周数据后执行 `train` 即可。
 
 ## 快速开始
 
@@ -32,25 +39,16 @@ git clone https://github.com/jiangliushi666/ncm-song-scorer.git
 cd ncm-song-scorer
 uv venv && uv pip install -r requirements.txt    # 或 python -m venv .venv + pip
 
-python -m ncm_scorer daily      # 拉榜 + 发现新歌 + 快照 + 打分（每天跑一次）
+python -m ncm_scorer daily      # 拉榜 + 邻域发现 + 快照 + 打分（每天跑一次）
 python -m ncm_scorer top -n 20  # 查看当前新歌排名
-```
-
-输出示例（真实数据，2026-08-15 实测）：
-
-```
-SCORE  SONG              ARTISTS
-71.3   如果你也刚好抬头看树  孙天宇
-59.3   衛星              柿崎ユウタ
-57.0   oh yeah?          Steve Lacy
-55.1   小两届             泽希poolhope
+python scripts/build_site.py    # 生成本地排名页
 ```
 
 ## CLI 命令
 
 | 命令 | 作用 |
 |---|---|
-| `daily` | 每日例行：拉榜、发现新歌、补详情、拍快照、打分 |
+| `daily` | 每日例行：拉榜、邻域发现、补详情、拍快照、打分 |
 | `charts` | 仅拉取新歌榜入库 |
 | `snapshot` | 对已跟踪歌曲拍互动快照 |
 | `score` | 重算启发式分数 |
@@ -60,6 +58,10 @@ SCORE  SONG              ARTISTS
 全局参数 `--db` 指定 SQLite 路径（默认 `ncm_scorer.db`）。
 
 ## 每日定时
+
+线上已由 GitHub Actions 在**北京时间 09:30**自动采集，并把排名页发布到 GitHub Pages。数据库落在私有仓 `ncm-scorer-data`。
+
+本机补跑：
 
 **Windows 任务计划：**
 
@@ -77,13 +79,14 @@ schtasks /create /tn ncm-scorer-daily ^
 ncm_scorer/          # 核心包
   api.py             # 网易云明文 API 直连客户端（已实测）
   storage.py         # SQLite：songs/snapshots/charts/scores
-  features.py        # 7 个核心特征（log1p 压缩、防泄漏）
-  scoring.py         # 启发式打分基线 heuristic-v1
+  features.py        # 9 个核心特征（log1p 压缩、防泄漏）
+  scoring.py         # 启发式打分 heuristic-v2
   model.py           # GBDT 训练/推理 gbc-v1
   pipeline.py        # daily 业务编排
   audio_features.py  # 可选 librosa 音频特征
   cli.py             # 命令行入口
 scripts/daily.py     # 定时任务脚本
+scripts/build_site.py
 tests/               # 离线单测（pytest，不联网）
 ```
 

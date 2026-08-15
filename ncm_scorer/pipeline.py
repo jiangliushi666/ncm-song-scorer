@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List
+import time
+from typing import Any, Dict, List, Optional
 
 from . import CHART_NEW_SONG
 from .api import NcmClient
@@ -23,6 +24,9 @@ ML_MODEL_VERSION = "gbc-v1"
 DEFAULT_NEW_SONG_WINDOW_DAYS = 45
 # 单次快照最多跟踪多少首歌（控制每日请求量：约 2 req/song -> 限速 1s 约 10 分钟）
 DEFAULT_MAX_TRACKED = 200
+# 歌手邻域负样本：每日最多拉多少位歌手、入库多少首未上榜近作
+DEFAULT_NEIGHBOR_ARTISTS = 12
+DEFAULT_NEIGHBOR_NEW = 20
 
 
 def fetch_chart_and_discover(client: NcmClient, store: Store,
@@ -45,6 +49,64 @@ def fetch_chart_and_discover(client: NcmClient, store: Store,
             new_count += 1
     log.info("chart %s: %d tracks, %d new songs", chart_id, len(tracks), new_count)
     return {"charted": len(tracks), "new_songs": new_count}
+
+
+def neighbor_candidates(raw_songs: List[Dict[str, Any]], known_ids: set,
+                        window_days: float = DEFAULT_NEW_SONG_WINDOW_DAYS,
+                        now: Optional[float] = None) -> List[Dict[str, Any]]:
+    """从歌手热门曲里筛出窗口内、尚未跟踪的近作（纯函数，供离线测试）."""
+    now = now if now is not None else time.time()
+    cutoff_ms = int((now - window_days * 86400) * 1000)
+    out: List[Dict[str, Any]] = []
+    seen = set(known_ids)
+    for s in raw_songs:
+        sid = s.get("song_id")
+        if sid is None or sid in seen:
+            continue
+        pt = s.get("publish_time")
+        if not pt or int(pt) < cutoff_ms:
+            continue
+        seen.add(sid)
+        out.append(s)
+    return out
+
+
+def discover_artist_neighbors(client: NcmClient, store: Store,
+                              max_artists: int = DEFAULT_NEIGHBOR_ARTISTS,
+                              max_new: int = DEFAULT_NEIGHBOR_NEW) -> Dict[str, int]:
+    """用上榜歌手的热门近作补未上榜负样本，供后续 ML 训练。
+
+    每日请求上限约 max_artists 次（另加后续快照），保持个人研究量级。
+    """
+    artist_ids = store.recent_lead_artist_ids(limit=max_artists)
+    known = set(store.tracked_song_ids())
+    added = 0
+    fetched = 0
+    for aid in artist_ids:
+        if added >= max_new:
+            break
+        try:
+            songs = client.artist_top_songs(aid)
+        except Exception as e:  # noqa: BLE001
+            log.warning("artist_top_songs(%s) failed: %s", aid, e)
+            continue
+        fetched += 1
+        for s in neighbor_candidates(songs, known):
+            if added >= max_new:
+                break
+            store.upsert_song({
+                "song_id": s["song_id"],
+                "name": s["name"],
+                "artists": s["artists"],
+                "artist_ids": s.get("artist_ids") or [],
+                "album": s.get("album"),
+                "publish_time": s.get("publish_time"),
+                "duration_ms": s.get("duration_ms"),
+            })
+            known.add(s["song_id"])
+            added += 1
+    log.info("neighbors: artists=%d fetched=%d new=%d", len(artist_ids), fetched, added)
+    return {"neighbor_artists": fetched, "neighbor_new": added}
 
 
 def enrich_songs(client: NcmClient, store: Store, song_ids: List[int]) -> None:
@@ -131,6 +193,7 @@ def run_daily(client: NcmClient, store: Store,
     """每日例行：发现新歌 -> 补全详情 -> 快照 -> 打分."""
     stats: Dict[str, Any] = {}
     stats.update(fetch_chart_and_discover(client, store))
+    stats.update(discover_artist_neighbors(client, store))
     # 新入库且缺 pop 的歌曲补详情
     need_enrich = [
         sid for sid in store.tracked_song_ids()

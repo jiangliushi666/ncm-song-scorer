@@ -77,13 +77,15 @@ class Store:
             self.conn.execute(
                 """UPDATE songs SET name=?, artists=?, artist_ids=?, album=?,
                        publish_time=COALESCE(?, publish_time), duration_ms=?,
-                       pop=COALESCE(?, pop), artist_album_size=?, artist_music_size=?
+                       pop=COALESCE(?, pop),
+                       artist_album_size=COALESCE(?, artist_album_size),
+                       artist_music_size=COALESCE(?, artist_music_size)
                    WHERE song_id=?""",
                 (row.get("name"), row.get("artists"),
                  json.dumps(row.get("artist_ids") or []), row.get("album"),
                  row.get("publish_time"), row.get("duration_ms"),
-                 row.get("pop"), row.get("artist_album_size") or 0,
-                 row.get("artist_music_size") or 0, row["song_id"]),
+                 row.get("pop"), row.get("artist_album_size"),
+                 row.get("artist_music_size"), row["song_id"]),
             )
             self.conn.commit()
             return False
@@ -178,15 +180,18 @@ class Store:
 
     def artist_chart_activity(self, as_of_ts: Optional[int] = None,
                               window_days: int = 90,
-                              exclude_song_id: Optional[int] = None
+                              exclude_song_id: Optional[int] = None,
+                              min_age_seconds: int = 0
                               ) -> Dict[int, Dict[str, int]]:
         """近 window_days 内各主歌手的上榜活跃度: {artist_id: {songs, days}}.
 
         as_of_ts 用于防标签泄漏：训练特征取首日快照时刻的活跃度，
-        只统计 ts <= as_of 的榜单记录。exclude_song_id 排除当前歌曲
-        自身的上榜记录（歌手势能应来自其**其他**歌曲）。
+        只统计 ts <= as_of - min_age_seconds 的榜单记录。exclude_song_id
+        排除当前歌曲自身的上榜记录（歌手势能应来自其**其他**歌曲）。
+        min_age_seconds=86400 可挡住同日专辑多首互相抬分。
         """
         as_of = as_of_ts or _now()
+        until = as_of - int(min_age_seconds)
         since = as_of - window_days * 86400
         cur = self.conn.execute(
             """
@@ -199,10 +204,44 @@ class Store:
               AND (? IS NULL OR c.song_id != ?)
             GROUP BY 1
             """,
-            (as_of, since, exclude_song_id, exclude_song_id),
+            (until, since, exclude_song_id, exclude_song_id),
         )
         return {r["artist_id"]: {"songs": r["songs"], "days": r["days"]}
                 for r in cur.fetchall()}
+
+    def best_chart_rank(self, song_id: int,
+                        chart_id: Optional[int] = None) -> Optional[int]:
+        """该歌曲在榜单上的历史最佳名次；从未上榜返回 None."""
+        if chart_id is None:
+            cur = self.conn.execute(
+                "SELECT MIN(rank) AS r FROM charts WHERE song_id=?", (song_id,)
+            )
+        else:
+            cur = self.conn.execute(
+                "SELECT MIN(rank) AS r FROM charts WHERE song_id=? AND chart_id=?",
+                (song_id, chart_id),
+            )
+        r = cur.fetchone()
+        return None if r is None or r["r"] is None else int(r["r"])
+
+    def recent_lead_artist_ids(self, since_ts: Optional[int] = None,
+                               limit: int = 15) -> List[int]:
+        """近期上榜歌曲的主歌手 id，按上榜曲目数降序."""
+        since = since_ts if since_ts is not None else _now() - 2 * 86400
+        cur = self.conn.execute(
+            """
+            SELECT json_extract(s.artist_ids, '$[0]') AS artist_id,
+                   COUNT(DISTINCT c.song_id) AS n
+            FROM charts c JOIN songs s ON s.song_id = c.song_id
+            WHERE c.ts >= ?
+              AND json_extract(s.artist_ids, '$[0]') IS NOT NULL
+            GROUP BY 1
+            ORDER BY n DESC
+            LIMIT ?
+            """,
+            (since, limit),
+        )
+        return [int(r["artist_id"]) for r in cur.fetchall() if r["artist_id"] is not None]
 
     # ------------------------------------------------------------- scores
     def add_score(self, song_id: int, score: float, model_version: str,

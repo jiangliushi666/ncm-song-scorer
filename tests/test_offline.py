@@ -13,9 +13,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ncm_scorer.features import build_features   # noqa: E402
-from ncm_scorer.scoring import heuristic_score   # noqa: E402
-from ncm_scorer.storage import Store             # noqa: E402
+from ncm_scorer.features import build_features, title_flags  # noqa: E402
+from ncm_scorer.model import build_labels                    # noqa: E402
+from ncm_scorer.pipeline import neighbor_candidates          # noqa: E402
+from ncm_scorer.scoring import LIVE_PENALTY, heuristic_score # noqa: E402
+from ncm_scorer.storage import Store                         # noqa: E402
 
 
 def make_store() -> Store:
@@ -81,6 +83,23 @@ class TestFeatures(unittest.TestCase):
         # 防泄漏：as_of 早于所有榜单记录时活跃度为 0
         f_early = build_features(store, 30, now=now - 90 * 86400)
         self.assertEqual(f_early["artist_chart_days_log"], 0.0)
+        # 同日上榜不计入（挡住专辑多首互相抬分）
+        store.record_chart(3779629, 34, 1, ts=int(now - 3600))
+        store.upsert_song({
+            "song_id": 34, "name": "same-day", "artists": "artist7",
+            "artist_ids": [7], "publish_time": int((now - 2 * 86400) * 1000),
+        })
+        f_same_day = build_features(store, 30)
+        self.assertAlmostEqual(f_same_day["artist_chart_days_log"], math.log1p(2))
+
+
+class TestTitleFlags(unittest.TestCase):
+    def test_live_and_cover(self):
+        self.assertTrue(title_flags("交个朋友 (Live)")["is_live"])
+        self.assertTrue(title_flags("锈 (Live版)")["is_live"])
+        self.assertTrue(title_flags("旧梦翻唱")["is_live"])
+        self.assertFalse(title_flags("隐藏相册")["is_live"])
+        self.assertFalse(title_flags("Olive")["is_live"])
 
 
 class TestHeuristic(unittest.TestCase):
@@ -101,10 +120,50 @@ class TestHeuristic(unittest.TestCase):
         score, detail = heuristic_score(build_features(store, 12))
         self.assertTrue(0.0 <= score <= 100.0)
         self.assertIn("density", detail)
+        self.assertIn("artist_heat", detail)
         self.assertIn("weights_used", detail)
         # 单快照场景权重再分配后总和仍为 1
         w = detail["weights_used"]
         self.assertAlmostEqual(sum(w.values()), 1.0)
+
+    def test_live_penalty_lowers_score(self):
+        store = make_store()
+        seed_song(store, 40, comments=[800, 1000], pop=80.0, publish_days_ago=2)
+        feats = build_features(store, 40)
+        studio, _ = heuristic_score(feats)
+        live, detail = heuristic_score({**feats, "is_live": 1.0})
+        self.assertLess(live, studio)
+        self.assertAlmostEqual(live / studio, LIVE_PENALTY, delta=0.02)
+        self.assertTrue(detail["is_live"])
+        self.assertEqual(detail["live_penalty"], LIVE_PENALTY)
+
+
+class TestLabels(unittest.TestCase):
+    def test_rank_cutoff_not_chart_membership(self):
+        store = make_store()
+        now = time.time()
+        seed_song(store, 51, comments=[10])
+        seed_song(store, 52, comments=[10])
+        seed_song(store, 53, comments=[10])  # 未上榜 = 负样本
+        store.record_chart(3779629, 51, 3, ts=int(now))
+        store.record_chart(3779629, 52, 40, ts=int(now))
+        labels = build_labels(store, rank_cutoff=20)
+        self.assertEqual(labels[51], 1)
+        self.assertEqual(labels[52], 0)
+        self.assertEqual(labels[53], 0)
+
+
+class TestNeighbors(unittest.TestCase):
+    def test_neighbor_candidates_filters_old_and_known(self):
+        now = time.time()
+        raw = [
+            {"song_id": 1, "publish_time": int((now - 3 * 86400) * 1000)},
+            {"song_id": 2, "publish_time": int((now - 80 * 86400) * 1000)},
+            {"song_id": 3, "publish_time": int((now - 2 * 86400) * 1000)},
+            {"song_id": 4, "publish_time": None},
+        ]
+        got = neighbor_candidates(raw, known_ids={1}, window_days=45, now=now)
+        self.assertEqual([s["song_id"] for s in got], [3])
 
 
 class TestStorage(unittest.TestCase):
@@ -115,6 +174,20 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(store.get_song(99)["name"], "b")
         store.record_chart(3779629, 99, 3)
         self.assertEqual(len(store.chart_hits(99)), 1)
+
+    def test_upsert_preserves_artist_scale(self):
+        store = make_store()
+        store.upsert_song({
+            "song_id": 88, "name": "a",
+            "artist_album_size": 5, "artist_music_size": 20, "pop": 70,
+        })
+        # 榜单回写不带资历/热度字段时不得把已有值清零
+        store.upsert_song({"song_id": 88, "name": "a2"})
+        song = store.get_song(88)
+        self.assertEqual(song["name"], "a2")
+        self.assertEqual(song["artist_album_size"], 5)
+        self.assertEqual(song["artist_music_size"], 20)
+        self.assertEqual(song["pop"], 70)
 
     def test_window_filters_by_publish_time(self):
         store = make_store()
@@ -135,6 +208,36 @@ class TestStorage(unittest.TestCase):
         # by_publish=False 时退回旧的入库时间语义：三首都在
         ids2 = store.tracked_song_ids(max_age_days=45, by_publish=False)
         self.assertEqual(set(ids2), {21, 22, 23})
+
+
+class TestSiteBuilder(unittest.TestCase):
+    def test_filters_and_live_badge(self):
+        scripts_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
+        )
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from build_site import build
+        from ncm_scorer.pipeline import score_all
+
+        db = os.path.join(tempfile.mkdtemp(), "t.db")
+        store = Store(db)
+        seed_song(store, 61, comments=[400], pop=70.0, publish_days_ago=2)
+        store.conn.execute("UPDATE songs SET name=? WHERE song_id=61", ("原创新歌",))
+        seed_song(store, 62, comments=[400], pop=70.0, publish_days_ago=2)
+        store.conn.execute("UPDATE songs SET name=? WHERE song_id=62", ("旧曲 (Live)",))
+        store.conn.commit()
+        score_all(store, [61, 62])
+        store.close()
+        out = os.path.join(tempfile.mkdtemp(), "index.html")
+        build(db, out, top_n=10)
+        page = open(out, encoding="utf-8").read()
+        self.assertIn('data-filter="studio"', page)
+        self.assertIn('data-filter="week"', page)
+        self.assertIn("旧曲 (Live)", page)
+        self.assertIn('class="badge">Live</span>', page)
+        self.assertIn("讨论密度", page)
+        self.assertIn("heuristic-v2", page)
 
 
 if __name__ == "__main__":

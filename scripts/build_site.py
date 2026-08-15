@@ -14,7 +14,16 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from ncm_scorer.features import title_flags  # noqa: E402
 from ncm_scorer.storage import Store  # noqa: E402
+
+PARTS = (
+    ("density", "讨论密度"),
+    ("pop", "平台热度"),
+    ("velocity", "评论增速"),
+    ("artist", "歌手资历"),
+    ("artist_heat", "上榜热"),
+)
 
 TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -26,16 +35,30 @@ TEMPLATE = """<!DOCTYPE html>
   :root {{ color-scheme: light dark; }}
   body {{
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-    max-width: 760px; margin: 0 auto; padding: 24px 16px 64px;
+    max-width: 860px; margin: 0 auto; padding: 24px 16px 64px;
     line-height: 1.6;
   }}
   h1 {{ font-size: 1.4em; margin-bottom: 4px; }}
-  .meta {{ color: #888; font-size: .85em; margin-bottom: 20px; }}
+  .meta {{ color: #888; font-size: .85em; margin-bottom: 14px; }}
+  .filters {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }}
+  .filters button {{
+    border: 1px solid #8886; background: transparent; color: inherit;
+    border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: .85em;
+  }}
+  .filters button.on {{ border-color: #2b7; color: #2b7; }}
   table {{ border-collapse: collapse; width: 100%; font-size: .95em; }}
   th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #8884; }}
   th {{ position: sticky; top: 0; background: inherit; backdrop-filter: blur(4px); }}
   td.score {{ font-variant-numeric: tabular-nums; font-weight: 600; }}
   tr.top3 td.score {{ color: #e6a817; }}
+  tr.song {{ cursor: pointer; }}
+  tr.song:hover {{ background: #8881; }}
+  tr.hidden {{ display: none; }}
+  .badge {{
+    display: inline-block; font-size: .7em; font-weight: 600;
+    border: 1px solid #8886; border-radius: 4px; padding: 0 5px;
+    margin-left: 6px; color: #888; vertical-align: middle;
+  }}
   button.play {{
     border: 1px solid #8886; background: transparent; color: inherit;
     border-radius: 50%; width: 28px; height: 28px; cursor: pointer;
@@ -45,6 +68,8 @@ TEMPLATE = """<!DOCTYPE html>
   #player-box iframe {{ display: block; border-radius: 8px; margin-bottom: 14px; }}
   .bar {{ display: inline-block; height: 6px; border-radius: 3px;
          background: linear-gradient(90deg,#4a9,#2c7); vertical-align: middle; }}
+  .parts {{ display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: .85em; color: #888; }}
+  .parts b {{ color: inherit; font-variant-numeric: tabular-nums; }}
   .foot {{ color: #888; font-size: .8em; margin-top: 28px; }}
   a {{ color: #2b7; }}
 </style>
@@ -52,6 +77,11 @@ TEMPLATE = """<!DOCTYPE html>
 <body>
 <h1>🎵 网易云新歌爆款潜力榜</h1>
 <div class="meta">更新于 {updated} · 打分模型：{model} · 数据源：网易云音乐新歌榜 · 由 GitHub Actions 每日自动更新</div>
+<div class="filters" id="filters">
+  <button type="button" data-filter="all" class="on">全部</button>
+  <button type="button" data-filter="studio">隐藏 Live</button>
+  <button type="button" data-filter="week">近 7 天</button>
+</div>
 <div id="player-box" hidden></div>
 <table>
 <thead><tr><th>#</th><th style="width:14%">分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th><th></th></tr></thead>
@@ -60,9 +90,9 @@ TEMPLATE = """<!DOCTYPE html>
 </tbody>
 </table>
 <div class="foot">
-  分数 0-100，启发式模型 heuristic-v1（讨论密度 40% + 平台热度 25% + 评论增速 20% + 歌手资历 15%）。
+  {foot}
   ▶ 为页面内试听，版权/VIP 歌曲为片段；点击<b>歌名</b>跳转网易云音乐可完整播放（登录态）。
-  仅个人研究用途，数据归网易云音乐所有。
+  点击行可展开分项明细。仅个人研究用途，数据归网易云音乐所有。
   项目：<a href="https://github.com/jiangliushi666/ncm-song-scorer">ncm-song-scorer</a>
 </div>
 <script>
@@ -70,15 +100,43 @@ TEMPLATE = """<!DOCTYPE html>
   var current = null;
   document.addEventListener('click', function (e) {{
     var btn = e.target.closest('button.play');
-    if (!btn) return;
-    var id = btn.getAttribute('data-id');
-    if (current === id) {{ box.hidden = !box.hidden; return; }}
-    current = id;
-    box.hidden = false;
-    box.innerHTML = '<iframe frameborder="no" border="0" marginwidth="0" marginheight="0" ' +
-      'width="100%" height="86" src="https://music.163.com/outchain/player?type=2&id=' +
-      id + '&auto=1&height=66"></iframe>';
-    box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+    if (btn) {{
+      e.stopPropagation();
+      var id = btn.getAttribute('data-id');
+      if (current === id) {{ box.hidden = !box.hidden; return; }}
+      current = id;
+      box.hidden = false;
+      box.innerHTML = '<iframe frameborder="no" border="0" marginwidth="0" marginheight="0" ' +
+        'width="100%" height="86" src="https://music.163.com/outchain/player?type=2&id=' +
+        id + '&auto=1&height=66"></iframe>';
+      box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+      return;
+    }}
+    if (e.target.closest('a')) return;
+    var song = e.target.closest('tr.song');
+    if (!song) return;
+    var next = song.nextElementSibling;
+    if (next && next.classList.contains('detail')) next.hidden = !next.hidden;
+  }});
+  var filter = 'all';
+  document.getElementById('filters').addEventListener('click', function (e) {{
+    var b = e.target.closest('button[data-filter]');
+    if (!b) return;
+    filter = b.getAttribute('data-filter');
+    Array.prototype.forEach.call(document.querySelectorAll('#filters button'), function (x) {{
+      x.classList.toggle('on', x === b);
+    }});
+    Array.prototype.forEach.call(document.querySelectorAll('tr.song'), function (tr) {{
+      var live = tr.getAttribute('data-live') === '1';
+      var age = Number(tr.getAttribute('data-age') || 999);
+      var hide = (filter === 'studio' && live) || (filter === 'week' && age > 7);
+      tr.classList.toggle('hidden', hide);
+      var d = tr.nextElementSibling;
+      if (d && d.classList.contains('detail')) {{
+        d.classList.toggle('hidden', hide);
+        if (hide) d.hidden = true;
+      }}
+    }});
   }});
 </script>
 <script type="application/ld+json">{ldjson}</script>
@@ -99,15 +157,43 @@ def _fmt_collected(ts) -> str:
     return time.strftime("%m-%d %H:%M", time.gmtime(int(ts)))
 
 
+def _age_days(publish_ms) -> int:
+    if not publish_ms:
+        return 999
+    return max(int((time.time() - int(publish_ms) / 1000.0) / 86400), 0)
+
+
+def _parse_detail(raw) -> dict:
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+
+
+def _pick_rows(store: Store, top_n: int):
+    choices = (
+        ("gbc-v1", "ML 模型 gbc-v1（新歌榜前 20 概率）",
+         "分数 0-100，机器学习模型 gbc-v1（标签 = 新歌榜最佳名次 ≤ 20）。"),
+        ("heuristic-v2", "启发式 heuristic-v2（Live 降权 + 歌手上榜热）",
+         "分数 0-100，启发式 heuristic-v2（讨论密度 36% + 平台热度 22% + 评论增速 18% + 歌手资历 12% + 上榜热 12%；Live/翻唱 ×0.78）。"),
+        ("heuristic-v1", "启发式 heuristic-v1（未训练，冷启动基线）",
+         "分数 0-100，启发式模型 heuristic-v1（讨论密度 40% + 平台热度 25% + 评论增速 20% + 歌手资历 15%）。"),
+    )
+    for version, label, foot in choices:
+        rows = store.latest_scores(model_version=version, limit=top_n)
+        if rows:
+            return rows, label, foot
+    return [], "", "数据库中还没有打分记录。"
+
+
 def build(db_path: str, out_path: str, top_n: int = 50) -> int:
     store = Store(db_path)
     try:
-        # 优先展示已训练 ML 分数；尚无模型时回退启发式基线
-        rows = store.latest_scores(model_version="gbc-v1", limit=top_n)
-        model_label = "ML 模型 gbc-v1（进入新歌榜概率）"
-        if not rows:
-            rows = store.latest_scores(model_version="heuristic-v1", limit=top_n)
-            model_label = "启发式 heuristic-v1（未训练，冷启动基线）"
+        rows, model_label, foot = _pick_rows(store, top_n)
     finally:
         store.close()
     if not rows:
@@ -116,32 +202,47 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
     trs = []
     for i, r in enumerate(rows, start=1):
         song_id = int(r.get("song_id") or 0)
-        name = html.escape(str(r.get("name") or ""))
+        name = str(r.get("name") or "")
         artists = html.escape(str(r.get("artists") or ""))
         score = float(r.get("score") or 0)
         published = html.escape(_fmt_publish(r.get("publish_time")))
         collected = html.escape(_fmt_collected(r.get("ts")))
-        cls = ' class="top3"' if i <= 3 else ""
+        flags = title_flags(name)
+        is_live = flags["is_live"] or bool(_parse_detail(r.get("detail")).get("is_live"))
+        age = _age_days(r.get("publish_time"))
+        badge = '<span class="badge">Live</span>' if is_live else ""
+        cls = ' class="song top3"' if i <= 3 else ' class="song"'
         song_link = (
             f'<a href="https://music.163.com/song?id={song_id}" '
-            f'target="_blank" rel="noopener">{name}</a>'
+            f'target="_blank" rel="noopener">{html.escape(name)}</a>{badge}'
         )
         play_btn = (
             f'<button class="play" data-id="{song_id}" '
-            f'aria-label="播放 {name}" '
+            f'aria-label="播放 {html.escape(name)}" '
             f'title="页面内试听（版权/VIP 歌曲为片段）">▶</button>'
         )
+        detail = _parse_detail(r.get("detail"))
+        parts = []
+        for key, label in PARTS:
+            if key in detail:
+                parts.append(f"{label} <b>{float(detail[key]):.1f}</b>")
+        if detail.get("is_live"):
+            parts.append(f"Live 降权 ×{detail.get('live_penalty', 0.78)}")
+        parts_html = " · ".join(parts) or "暂无分项明细"
         trs.append(
-            f'<tr{cls}><td>{i}</td><td class="score">{score:.1f} '
+            f'<tr{cls} data-live="{1 if is_live else 0}" data-age="{age}">'
+            f'<td>{i}</td><td class="score">{score:.1f} '
             f'<span class="bar" style="width:{score * 0.9:.0f}px"></span></td>'
             f"<td>{song_link}</td><td>{artists}</td>"
-            f"<td>{published}</td><td>{collected}</td><td>{play_btn}</td></tr>"
+            f"<td>{published}</td><td>{collected}</td><td>{play_btn}</td></tr>\n"
+            f'<tr class="detail" hidden><td colspan="7"><div class="parts">{parts_html}</div></td></tr>'
         )
     updated = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     page = TEMPLATE.format(
         updated=updated,
-        model=model_label,
+        model=html.escape(model_label),
         rows="\n".join(trs),
+        foot=foot,
         ldjson=json.dumps(
             {"name": "ncm-scorer ranking", "updated": updated,
              "top1": rows[0].get("name")},

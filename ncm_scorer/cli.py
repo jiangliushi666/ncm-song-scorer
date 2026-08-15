@@ -74,7 +74,15 @@ def main(argv=None) -> int:
             for r in results[:20]:
                 print(f"{r['score']:>5}  {r['name']} - {r['artists']}")
         elif args.cmd == "top":
-            rows = store.latest_scores(limit=args.n)
+            version = "gbc-v1" if args.model else None
+            if version:
+                rows = store.latest_scores(model_version=version, limit=args.n)
+            else:
+                rows = store.latest_scores(model_version="heuristic-v2", limit=args.n)
+                if not rows:
+                    rows = store.latest_scores(model_version="heuristic-v1", limit=args.n)
+                if not rows:
+                    rows = store.latest_scores(limit=args.n)
             for r in rows:
                 pt, ts = r.get("publish_time"), r.get("ts")
                 r["published"] = (

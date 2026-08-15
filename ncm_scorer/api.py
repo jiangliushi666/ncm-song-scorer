@@ -4,6 +4,7 @@
 - GET /api/playlist/detail?id=3779629        新歌榜 100 首
 - GET /api/song/detail/?id={id}&ids=[{id}]   歌曲详情（热度 pop、专辑发行时间、歌手规模）
 - GET /api/v1/resource/comments/R_SO_4_{id}  评论总数
+- GET /api/artist/top/song?id={artist_id}    歌手热门曲（邻域负样本）
 
 不需要 weapi 加密、不需要登录；注意控制请求频率（默认限速 1 req/s 量级），
 仅用于个人研究。
@@ -122,6 +123,25 @@ class NcmClient:
                 "artist_music_size": int(lead.get("musicSize") or 0),
             })
         return out
+
+    def artist_top_songs(self, artist_id: int) -> List[Dict[str, Any]]:
+        """歌手热门曲目（明文接口，见 docs/API_ENDPOINTS.md §4）."""
+        data = self._get("/artist/top/song", {"id": artist_id})
+        songs = data.get("songs") or data.get("hotSongs") or []
+        parsed: List[Dict[str, Any]] = []
+        for s in songs:
+            artists = s.get("artists") or s.get("ar") or []
+            album = s.get("album") or s.get("al") or {}
+            parsed.append({
+                "song_id": s["id"],
+                "name": s.get("name", ""),
+                "artists": "/".join(a.get("name", "") for a in artists),
+                "artist_ids": [a["id"] for a in artists if a.get("id")],
+                "album": album.get("name", ""),
+                "publish_time": album.get("publishTime") or album.get("publish_time"),
+                "duration_ms": s.get("duration") or s.get("dt"),
+            })
+        return parsed
 
     def comments_total(self, song_id: int) -> Optional[int]:
         """评论总数；拉取失败返回 None（不中断流程）."""

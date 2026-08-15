@@ -12,6 +12,7 @@ venv/
 *.db-journal
 model.pkl
 model.pkl.meta.json
+site/
 
 # IDE / OS
 .idea/

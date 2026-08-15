@@ -1,7 +1,8 @@
-"""机器学习层：以「发布后 N 天内进入新歌榜」为标签训练流行度分类器.
+"""机器学习层：以「新歌榜最佳名次是否进入前 N」为标签训练流行度分类器.
 
 设计要点：
-- 标签来自 charts 表（新歌榜直连可用），避免依赖热歌榜/飙升榜；
+- 旧标签「first_seen 后 horizon 天内进过榜」对「从新歌榜发现的歌」恒为 1，无法训练；
+- 新标签：上榜且最佳名次 <= rank_cutoff 为正，未上榜（歌手邻域）或榜尾为负；
 - 特征只用歌曲入库首日的快照（早期特征），杜绝标签泄漏；
 - 数据不足（正样本 < 10）时拒绝训练并提示继续跑 daily.py 攒数据。
 """
@@ -37,15 +38,20 @@ def _load_sklearn():
         ) from e
 
 
-def build_labels(store, horizon_days: float = 14.0) -> Dict[int, int]:
-    """对每首已跟踪歌曲打标签：first_seen 后 horizon_days 内进过任一榜单 => 1."""
-    horizon_s = horizon_days * 86400
-    songs = store.conn.execute("SELECT song_id, first_seen FROM songs").fetchall()
+def build_labels(store, horizon_days: float = 14.0,
+                 rank_cutoff: int = 20) -> Dict[int, int]:
+    """对每首已跟踪歌曲打标签.
+
+    正样本：上过新歌榜且历史最佳名次 <= rank_cutoff。
+    负样本：从未上榜（歌手邻域发现）或上榜但名次更靠后。
+    horizon_days 保留兼容，当前不参与判定（单日榜无法还原「发布后 N 天内首次上榜」）。
+    """
+    del horizon_days  # 接口保留，待有跨日榜史后再按发行窗口过滤
+    songs = store.conn.execute("SELECT song_id FROM songs").fetchall()
     labels: Dict[int, int] = {}
     for s in songs:
-        hits = store.chart_hits(s["song_id"], since_ts=s["first_seen"])
-        in_window = [h for h in hits if h["ts"] <= s["first_seen"] + horizon_s]
-        labels[s["song_id"]] = 1 if in_window else 0
+        best = store.best_chart_rank(s["song_id"])
+        labels[s["song_id"]] = 1 if best is not None and best <= rank_cutoff else 0
     return labels
 
 

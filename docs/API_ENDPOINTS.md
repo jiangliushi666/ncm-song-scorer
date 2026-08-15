@@ -40,13 +40,15 @@ GET https://music.163.com/api/v1/resource/comments/R_SO_4_{song_id}?limit=1&offs
 - 关键字段：`total`（评论总数）
 - 实测：海阔天空 → `{"total":70442,"code":200}`
 
-### 4. 歌手热门歌曲（备用）
+### 4. 歌手热门歌曲（邻域负样本）
 
 ```
 GET https://music.163.com/api/artist/top/song?id={artist_id}
 ```
 
-- 实测可用（返回该歌手热门曲目），当前主流程未使用，留作扩展。
+- 实测可用（返回该歌手热门曲目）
+- daily 流程用来发现「上榜歌手的其他近作、但未进新歌榜」的歌，作为 ML 负样本
+- 每日上限约 12 位歌手 / 20 首新入库，避免放大请求量
 
 ## ❌ 实测不可用（避坑记录）
 
