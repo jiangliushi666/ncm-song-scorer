@@ -61,6 +61,7 @@ TEMPLATE = """<!DOCTYPE html>
 </table>
 <div class="foot">
   分数 0-100，启发式模型 heuristic-v1（讨论密度 40% + 平台热度 25% + 评论增速 20% + 歌手资历 15%）。
+  ▶ 为页面内试听，版权/VIP 歌曲为片段；点击<b>歌名</b>跳转网易云音乐可完整播放（登录态）。
   仅个人研究用途，数据归网易云音乐所有。
   项目：<a href="https://github.com/jiangliushi666/ncm-song-scorer">ncm-song-scorer</a>
 </div>
@@ -122,7 +123,8 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
         )
         play_btn = (
             f'<button class="play" data-id="{song_id}" '
-            f'aria-label="播放 {name}">▶</button>'
+            f'aria-label="播放 {name}" '
+            f'title="页面内试听（版权/VIP 歌曲为片段）">▶</button>'
         )
         trs.append(
             f'<tr{cls}><td>{i}</td><td class="score">{score:.1f} '
