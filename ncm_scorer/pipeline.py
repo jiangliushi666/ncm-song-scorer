@@ -194,11 +194,14 @@ def run_daily(client: NcmClient, store: Store,
     stats: Dict[str, Any] = {}
     stats.update(fetch_chart_and_discover(client, store))
     stats.update(discover_artist_neighbors(client, store))
-    # 新入库且缺 pop 的歌曲补详情
-    need_enrich = [
-        sid for sid in store.tracked_song_ids()
-        if (store.get_song(sid) or {}).get("pop") is None
-    ]
+    # 缺 pop，或歌手资历被旧版榜单回写清零的歌曲，补一次详情
+    need_enrich = []
+    for sid in store.tracked_song_ids():
+        song = store.get_song(sid)
+        if song is None:
+            continue
+        if song.get("pop") is None or not song.get("artist_music_size"):
+            need_enrich.append(sid)
     if need_enrich:
         enrich_songs(client, store, need_enrich[:max_tracked])
     ids = store.tracked_song_ids(max_age_days=DEFAULT_NEW_SONG_WINDOW_DAYS)[:max_tracked]
