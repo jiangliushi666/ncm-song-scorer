@@ -176,6 +176,34 @@ class Store:
         cur = self.conn.execute(q, args)
         return [dict(r) for r in cur.fetchall()]
 
+    def artist_chart_activity(self, as_of_ts: Optional[int] = None,
+                              window_days: int = 90,
+                              exclude_song_id: Optional[int] = None
+                              ) -> Dict[int, Dict[str, int]]:
+        """近 window_days 内各主歌手的上榜活跃度: {artist_id: {songs, days}}.
+
+        as_of_ts 用于防标签泄漏：训练特征取首日快照时刻的活跃度，
+        只统计 ts <= as_of 的榜单记录。exclude_song_id 排除当前歌曲
+        自身的上榜记录（歌手势能应来自其**其他**歌曲）。
+        """
+        as_of = as_of_ts or _now()
+        since = as_of - window_days * 86400
+        cur = self.conn.execute(
+            """
+            SELECT json_extract(s.artist_ids, '$[0]') AS artist_id,
+                   COUNT(DISTINCT c.song_id) AS songs,
+                   COUNT(DISTINCT date(c.ts, 'unixepoch')) AS days
+            FROM charts c JOIN songs s ON s.song_id = c.song_id
+            WHERE c.ts <= ? AND c.ts >= ?
+              AND json_extract(s.artist_ids, '$[0]') IS NOT NULL
+              AND (? IS NULL OR c.song_id != ?)
+            GROUP BY 1
+            """,
+            (as_of, since, exclude_song_id, exclude_song_id),
+        )
+        return {r["artist_id"]: {"songs": r["songs"], "days": r["days"]}
+                for r in cur.fetchall()}
+
     # ------------------------------------------------------------- scores
     def add_score(self, song_id: int, score: float, model_version: str,
                   detail: Optional[Dict[str, Any]] = None,
@@ -195,13 +223,16 @@ class Store:
             "g.publish_time "
             "FROM scores s JOIN (SELECT song_id, MAX(ts) AS mts FROM scores "
             "{mv} GROUP BY song_id) x ON s.song_id=x.song_id AND s.ts=x.mts "
-            "JOIN songs g ON g.song_id=s.song_id ORDER BY s.score DESC LIMIT ?"
+            "{mvo} JOIN songs g ON g.song_id=s.song_id "
+            "ORDER BY s.score DESC LIMIT ?"
         )
         if model_version:
             mv = "WHERE model_version=?"
+            mvo = "AND s.model_version=?"
             args: Iterable[Any] = (model_version, model_version, limit)
         else:
             mv = ""
+            mvo = ""
             args = (limit,)
-        cur = self.conn.execute(q.format(mv=mv), tuple(args))
+        cur = self.conn.execute(q.format(mv=mv, mvo=mvo), tuple(args))
         return [dict(r) for r in cur.fetchall()]

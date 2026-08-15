@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List
 
 from . import CHART_NEW_SONG
@@ -15,6 +16,8 @@ from .scoring import MODEL_VERSION, heuristic_score
 from .storage import Store
 
 log = logging.getLogger(__name__)
+
+ML_MODEL_VERSION = "gbc-v1"
 
 # 新歌定义：按歌曲发布时间计，发行超过该天数即停止跟踪（榜单上发布较久的歌会提前退出）
 DEFAULT_NEW_SONG_WINDOW_DAYS = 45
@@ -81,8 +84,23 @@ def take_snapshots(client: NcmClient, store: Store,
     return {"ok": ok, "failed": fail}
 
 
-def score_all(store: Store, song_ids: List[int]) -> List[Dict[str, Any]]:
-    """对指定歌曲计算启发式分数并落库，返回按分数降序的结果."""
+def score_all(store: Store, song_ids: List[int],
+              model_path: str = "model.pkl") -> List[Dict[str, Any]]:
+    """对指定歌曲计算启发式分数并落库；若存在已训练模型则追加 ML 概率分."""
+    ml_predict = None
+    if os.path.exists(model_path):
+        try:
+            from .model import load_model
+            clf = load_model(model_path)
+            from .features import FEATURE_NAMES
+
+            def ml_predict(feats: Dict[str, Any]) -> float:
+                x = [[feats[k] for k in FEATURE_NAMES]]
+                return float(clf.predict_proba(x)[0][1])
+        except Exception as e:  # noqa: BLE001
+            log.warning("model %s load failed, skip ML scores: %s", model_path, e)
+            ml_predict = None
+
     results: List[Dict[str, Any]] = []
     for sid in song_ids:
         song = store.get_song(sid)
@@ -91,10 +109,19 @@ def score_all(store: Store, song_ids: List[int]) -> List[Dict[str, Any]]:
         feats = build_features(store, sid)
         score, detail = heuristic_score(feats)
         store.add_score(sid, score, MODEL_VERSION, detail=detail)
-        results.append({
+        row = {
             "song_id": sid, "name": song.get("name"),
             "artists": song.get("artists"), "score": score, "detail": detail,
-        })
+        }
+        if ml_predict is not None:
+            try:
+                prob = ml_predict(feats)
+                store.add_score(sid, round(prob * 100, 1), ML_MODEL_VERSION,
+                                detail={"prob": round(prob, 4)})
+                row["ml_score"] = round(prob * 100, 1)
+            except Exception as e:  # noqa: BLE001
+                log.warning("ml predict failed for %s: %s", sid, e)
+        results.append(row)
     results.sort(key=lambda r: r["score"], reverse=True)
     return results
 

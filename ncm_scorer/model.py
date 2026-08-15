@@ -138,13 +138,18 @@ def train(store, horizon_days: float = 14.0, model_path: str = "model.pkl"
     return meta
 
 
-def predict_proba(features: Dict[str, float], model_path: str = "model.pkl"
-                  ) -> float:
-    """读取已训练模型，输出该歌「进入新歌榜」的概率 [0,1]."""
+def load_model(model_path: str = "model.pkl"):
+    """加载已训练的模型对象；文件不存在时抛 ModelNotReady."""
     import pickle
     if not os.path.exists(model_path):
         raise ModelNotReady(f"模型文件不存在：{model_path}，先运行 train")
     with open(model_path, "rb") as f:
-        clf = pickle.load(f)
+        return pickle.load(f)
+
+
+def predict_proba(features: Dict[str, float], model_path: str = "model.pkl"
+                  ) -> float:
+    """读取已训练模型，输出该歌「进入新歌榜」的概率 [0,1]."""
+    clf = load_model(model_path)
     x = [[features[k] for k in FEATURE_NAMES]]
     return float(clf.predict_proba(x)[0][1])

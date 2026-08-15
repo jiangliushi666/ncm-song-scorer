@@ -51,7 +51,7 @@ TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <h1>🎵 网易云新歌爆款潜力榜</h1>
-<div class="meta">更新于 {updated} · 数据源：网易云音乐新歌榜 · 由 GitHub Actions 每日自动更新</div>
+<div class="meta">更新于 {updated} · 打分模型：{model} · 数据源：网易云音乐新歌榜 · 由 GitHub Actions 每日自动更新</div>
 <div id="player-box" hidden></div>
 <table>
 <thead><tr><th>#</th><th style="width:14%">分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th><th></th></tr></thead>
@@ -102,7 +102,12 @@ def _fmt_collected(ts) -> str:
 def build(db_path: str, out_path: str, top_n: int = 50) -> int:
     store = Store(db_path)
     try:
-        rows = store.latest_scores(limit=top_n)
+        # 优先展示已训练 ML 分数；尚无模型时回退启发式基线
+        rows = store.latest_scores(model_version="gbc-v1", limit=top_n)
+        model_label = "ML 模型 gbc-v1（进入新歌榜概率）"
+        if not rows:
+            rows = store.latest_scores(model_version="heuristic-v1", limit=top_n)
+            model_label = "启发式 heuristic-v1（未训练，冷启动基线）"
     finally:
         store.close()
     if not rows:
@@ -135,6 +140,7 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
     updated = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     page = TEMPLATE.format(
         updated=updated,
+        model=model_label,
         rows="\n".join(trs),
         ldjson=json.dumps(
             {"name": "ncm-scorer ranking", "updated": updated,

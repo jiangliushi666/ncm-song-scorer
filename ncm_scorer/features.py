@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from typing import Any, Dict, List, Optional
@@ -17,6 +18,7 @@ from .storage import Store
 FEATURE_NAMES = [
     "pop",                    # 平台热度值 0-100
     "artist_scale",           # log1p(专辑数 + 单曲数)，主歌手行业资历代理
+    "artist_chart_days_log",  # log1p(主歌手近90天上榜天数)，流量歌手效应
     "age_hours",              # 距发行小时数（截断到 [1, 24*90]）
     "comments_total_log",     # log1p(最新评论总数)
     "comment_velocity_log",   # log1p(每小时评论增速)，两次快照差分
@@ -57,11 +59,25 @@ def build_features(store: Store, song_id: int,
             velocity = max(c1 - c0, 0) / d_hours
             has_velocity = 1.0
 
+    # 主歌手近 90 天**其他歌曲**的上榜天数（截至 now，训练时传首日快照时刻防泄漏；
+    # 排除自身，歌手势能不能来自这首歌自己的上榜记录）
+    try:
+        lead_artist = (json.loads(song.get("artist_ids") or "[]") or [None])[0]
+    except (TypeError, ValueError):
+        lead_artist = None
+    chart_days = 0
+    if lead_artist is not None:
+        activity = store.artist_chart_activity(
+            as_of_ts=int(now), exclude_song_id=song_id
+        )
+        chart_days = (activity.get(lead_artist) or {}).get("days") or 0
+
     return {
         "pop": float(song.get("pop") or 0.0),
         "artist_scale": math.log1p(
             int(song.get("artist_album_size") or 0) + int(song.get("artist_music_size") or 0)
         ),
+        "artist_chart_days_log": math.log1p(chart_days),
         "age_hours": age_h,
         "comments_total_log": math.log1p(comments_total),
         "comment_velocity_log": math.log1p(velocity),

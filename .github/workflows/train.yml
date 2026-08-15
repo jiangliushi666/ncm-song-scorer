@@ -1,0 +1,51 @@
+name: train-model
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATA_REPO: ${{ github.repository_owner }}/ncm-scorer-data
+      DATA_TOKEN: ${{ secrets.DATA_PUSH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install requests scikit-learn
+
+      - name: Restore database
+        run: |
+          set -e
+          git clone --depth 1 "https://x-access-token:${DATA_TOKEN}@github.com/${DATA_REPO}.git" data_repo
+          cp data_repo/ncm_scorer.db .
+
+      - name: Train model
+        run: |
+          set -e
+          python -m ncm_scorer train || {
+            echo "::notice::样本仍不足（需总样本>=40 且正样本>=10），继续每日采集后重试"
+            exit 1
+          }
+          cat model.pkl.meta.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Persist model to data repo
+        if: success()
+        run: |
+          set -e
+          cd data_repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp ../model.pkl ../model.pkl.meta.json .
+          git add model.pkl model.pkl.meta.json
+          git commit -m "model $(date -u +%F)" || echo "no changes"
+          git push

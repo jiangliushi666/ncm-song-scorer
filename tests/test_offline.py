@@ -53,6 +53,35 @@ class TestFeatures(unittest.TestCase):
         self.assertEqual(f["has_velocity"], 0.0)
         self.assertEqual(f["comment_velocity_log"], 0.0)
 
+    def test_artist_chart_days_feature(self):
+        import json as _json
+        store = make_store()
+        now = time.time()
+        # 歌手 7：两首歌分别在 3 天和 5 天前上榜（不同日期 => days=2）
+        for sid, days_ago in ((31, 3), (32, 5)):
+            store.upsert_song({
+                "song_id": sid, "name": f"s{sid}", "artists": "artist7",
+                "artist_ids": [7], "publish_time": int((now - 10 * 86400) * 1000),
+            })
+            store.record_chart(3779629, sid, 1, ts=int(now - days_ago * 86400))
+        # 待测歌：同歌手 7
+        seed_song(store, 30, comments=[100])
+        store.conn.execute("UPDATE songs SET artist_ids=? WHERE song_id=30", ('[7]',))
+        store.conn.commit()
+        # 对照歌：无上榜歌手 99
+        seed_song(store, 33, comments=[100])
+        store.conn.execute("UPDATE songs SET artist_ids=? WHERE song_id=33", ('[99]',))
+        store.conn.commit()
+
+        f_hot = build_features(store, 30)
+        f_cold = build_features(store, 33)
+        import math
+        self.assertAlmostEqual(f_hot["artist_chart_days_log"], math.log1p(2))
+        self.assertEqual(f_cold["artist_chart_days_log"], 0.0)
+        # 防泄漏：as_of 早于所有榜单记录时活跃度为 0
+        f_early = build_features(store, 30, now=now - 90 * 86400)
+        self.assertEqual(f_early["artist_chart_days_log"], 0.0)
+
 
 class TestHeuristic(unittest.TestCase):
     def test_hot_beats_cold(self):

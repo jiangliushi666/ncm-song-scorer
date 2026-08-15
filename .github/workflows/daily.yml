@@ -38,6 +38,11 @@ jobs:
               cp data_repo/ncm_scorer.db .
               echo "restored db: $(du -h ncm_scorer.db | cut -f1)"
             fi
+            # 已训练的模型（若 train workflow 产出过）一并恢复，用于每日 ML 打分
+            if [ -f data_repo/model.pkl ]; then
+              cp data_repo/model.pkl data_repo/model.pkl.meta.json . 2>/dev/null || true
+              echo "restored model"
+            fi
           else
             echo "data repo not reachable, starting fresh"
             mkdir -p data_repo
