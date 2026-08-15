@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 
 from . import __version__
 from .api import NcmClient
@@ -69,9 +70,17 @@ def main(argv=None) -> int:
                 print(f"{r['score']:>5}  {r['name']} - {r['artists']}")
         elif args.cmd == "top":
             rows = store.latest_scores(limit=args.n)
+            for r in rows:
+                pt, ts = r.get("publish_time"), r.get("ts")
+                r["published"] = (
+                    time.strftime("%Y-%m-%d", time.gmtime(pt / 1000)) if pt else "-"
+                )
+                r["collected"] = (
+                    time.strftime("%m-%d %H:%M", time.gmtime(ts)) if ts else "-"
+                )
             print(_fmt_rows(
-                rows, ["score", "name", "artists"],
-                ["SCORE", "SONG", "ARTISTS"],
+                rows, ["score", "name", "artists", "published", "collected"],
+                ["SCORE", "SONG", "ARTISTS", "PUBLISHED", "COLLECTED"],
             ))
         elif args.cmd == "train":
             from .model import train

@@ -181,7 +181,8 @@ class Store:
     def latest_scores(self, model_version: Optional[str] = None,
                       limit: int = 50) -> List[Dict[str, Any]]:
         q = (
-            "SELECT s.song_id, s.score, s.ts, s.detail, g.name, g.artists "
+            "SELECT s.song_id, s.score, s.ts, s.detail, g.name, g.artists, "
+            "g.publish_time "
             "FROM scores s JOIN (SELECT song_id, MAX(ts) AS mts FROM scores "
             "{mv} GROUP BY song_id) x ON s.song_id=x.song_id AND s.ts=x.mts "
             "JOIN songs g ON g.song_id=s.song_id ORDER BY s.score DESC LIMIT ?"

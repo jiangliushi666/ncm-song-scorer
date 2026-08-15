@@ -46,7 +46,7 @@ TEMPLATE = """<!DOCTYPE html>
 <h1>🎵 网易云新歌爆款潜力榜</h1>
 <div class="meta">更新于 {updated} · 数据源：网易云音乐新歌榜 · 由 GitHub Actions 每日自动更新</div>
 <table>
-<thead><tr><th>#</th><th style="width:14%">分数</th><th>歌曲</th><th>歌手</th></tr></thead>
+<thead><tr><th>#</th><th style="width:14%">分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
@@ -60,6 +60,18 @@ TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>
 """
+
+
+def _fmt_publish(ms) -> str:
+    if not ms:
+        return "—"
+    return time.strftime("%Y-%m-%d", time.gmtime(int(ms) / 1000))
+
+
+def _fmt_collected(ts) -> str:
+    if not ts:
+        return "—"
+    return time.strftime("%m-%d %H:%M", time.gmtime(int(ts)))
 
 
 def build(db_path: str, out_path: str, top_n: int = 50) -> int:
@@ -76,11 +88,14 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
         name = html.escape(str(r.get("name") or ""))
         artists = html.escape(str(r.get("artists") or ""))
         score = float(r.get("score") or 0)
+        published = html.escape(_fmt_publish(r.get("publish_time")))
+        collected = html.escape(_fmt_collected(r.get("ts")))
         cls = ' class="top3"' if i <= 3 else ""
         trs.append(
             f'<tr{cls}><td>{i}</td><td class="score">{score:.1f} '
             f'<span class="bar" style="width:{score * 0.9:.0f}px"></span></td>'
-            f"<td>{name}</td><td>{artists}</td></tr>"
+            f"<td>{name}</td><td>{artists}</td>"
+            f"<td>{published}</td><td>{collected}</td></tr>"
         )
     updated = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     page = TEMPLATE.format(
