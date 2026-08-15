@@ -295,9 +295,9 @@ class TestSiteBuilder(unittest.TestCase):
         self.assertIn("旧曲 (Live)", page)
         self.assertIn('class="badge">Live</span>', page)
         self.assertIn('class="badge vip">VIP</span>', page)
-        self.assertIn("去网易云播放", page)
         self.assertIn("PLAY_API", page)
         self.assertIn("playSong", page)
+        self.assertIn("<audio", page)
         self.assertIn("讨论密度", page)
         self.assertIn("heuristic-v2", page)
 
