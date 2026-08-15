@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ncm-scorer"
+version = "0.1.0"
+description = "网易云音乐新歌自动评分系统：榜单发现 + 互动快照 + 启发式/ML 打分"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["netease-cloud-music", "hit-prediction", "music", "scoring"]
+dependencies = [
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+ml = ["scikit-learn>=1.2"]
+audio = ["librosa>=0.10", "numpy>=1.24"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+ncm-scorer = "ncm_scorer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ncm_scorer*"]

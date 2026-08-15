@@ -1,0 +1,135 @@
+"""网易云音乐明文 API 直连客户端.
+
+所有端点均经实测（2026-08-14，详见 docs/API_ENDPOINTS.md）：
+- GET /api/playlist/detail?id=3779629        新歌榜 100 首
+- GET /api/song/detail/?id={id}&ids=[{id}]   歌曲详情（热度 pop、专辑发行时间、歌手规模）
+- GET /api/v1/resource/comments/R_SO_4_{id}  评论总数
+
+不需要 weapi 加密、不需要登录；注意控制请求频率（默认限速 1 req/s 量级），
+仅用于个人研究。
+"""
+
+from __future__ import annotations
+
+import time
+import json
+import logging
+from typing import Any, Dict, List, Optional
+import requests
+
+log = logging.getLogger(__name__)
+
+BASE = "https://music.163.com/api"
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+DEFAULT_HEADERS = {"User-Agent": UA, "Referer": "https://music.163.com"}
+
+
+class NcmApiError(RuntimeError):
+    pass
+
+
+class NcmClient:
+    """轻量直连客户端，内置限速与单次重试."""
+
+    def __init__(self, min_interval: float = 1.0, timeout: float = 15.0):
+        self.min_interval = min_interval
+        self.timeout = timeout
+        self._last_ts = 0.0
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+
+    # ------------------------------------------------------------- internals
+    def _throttle(self) -> None:
+        wait = self.min_interval - (time.time() - self._last_ts)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_ts = time.time()
+
+    def _get(self, path: str, params: Optional[Dict[str, Any]] = None,
+             retries: int = 1) -> Dict[str, Any]:
+        url = f"{BASE}{path}"
+        for attempt in range(retries + 1):
+            self._throttle()
+            try:
+                resp = self.session.get(url, params=params, timeout=self.timeout)
+                if resp.status_code != 200:
+                    raise NcmApiError(f"HTTP {resp.status_code} for {url}")
+                data = resp.json()
+                if data.get("code") not in (200, None):
+                    raise NcmApiError(f"API code={data.get('code')} for {url}: {str(data)[:200]}")
+                return data
+            except (requests.RequestException, json.JSONDecodeError) as e:
+                if attempt == retries:
+                    raise NcmApiError(f"request failed for {url}: {e}") from e
+                log.warning("retry %s: %s", url, e)
+                time.sleep(2)
+        raise NcmApiError("unreachable")
+
+    # ---------------------------------------------------------------- public
+    def chart_tracks(self, chart_id: int) -> List[Dict[str, Any]]:
+        """拉取榜单曲目，返回 [{song_id, rank, name, artists, album, publish_time}]."""
+        data = self._get("/playlist/detail", {"id": chart_id})
+        result = data.get("result") or {}
+        playlist = result.get("playlist") or result
+        tracks = playlist.get("tracks") or []
+        if not tracks:
+            return []
+        parsed: List[Dict[str, Any]] = []
+        for rank, t in enumerate(tracks, start=1):
+            parsed.append({
+                "song_id": t["id"],
+                "rank": rank,
+                "name": t.get("name", ""),
+                "artists": "/".join(a.get("name", "") for a in t.get("artists", [])),
+                "artist_ids": [a["id"] for a in t.get("artists", []) if a.get("id")],
+                "album": (t.get("album") or {}).get("name", ""),
+                "publish_time": (t.get("album") or {}).get("publishTime"),
+                "duration_ms": t.get("duration"),
+            })
+        return parsed
+
+    def song_detail(self, song_id: int) -> Dict[str, Any]:
+        """单首歌详情: 热度 pop(0-100)、发行时间、主歌手规模."""
+        return self.song_details([song_id])[0]
+
+    def song_details(self, song_ids: List[int]) -> List[Dict[str, Any]]:
+        """批量歌曲详情（ids 接口一次最多建议 100 首）."""
+        if not song_ids:
+            return []
+        data = self._get(
+            "/song/detail/",
+            {"id": song_ids[0], "ids": json.dumps(list(song_ids))},
+        )
+        songs = data.get("songs") or []
+        out: List[Dict[str, Any]] = []
+        for s in songs:
+            artists = s.get("artists") or []
+            lead = artists[0] if artists else {}
+            album = s.get("album") or {}
+            out.append({
+                "song_id": s["id"],
+                "name": s.get("name", ""),
+                "artists": "/".join(a.get("name", "") for a in artists),
+                "artist_ids": [a["id"] for a in artists if a.get("id")],
+                "album": album.get("name", ""),
+                "publish_time": album.get("publishTime"),
+                "duration_ms": s.get("duration"),
+                "pop": float(s.get("popularity") or 0.0),
+                "artist_album_size": int(lead.get("albumSize") or 0),
+                "artist_music_size": int(lead.get("musicSize") or 0),
+            })
+        return out
+
+    def comments_total(self, song_id: int) -> Optional[int]:
+        """评论总数；拉取失败返回 None（不中断流程）."""
+        try:
+            data = self._get(
+                f"/v1/resource/comments/R_SO_4_{song_id}", {"limit": 1, "offset": 0}
+            )
+            return int(data.get("total") or 0)
+        except NcmApiError as e:
+            log.warning("comments_total(%s) failed: %s", song_id, e)
+            return None
