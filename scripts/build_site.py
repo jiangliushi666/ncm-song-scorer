@@ -70,8 +70,6 @@ TEMPLATE = """<!DOCTYPE html>
   #player-box audio {{ width: 100%; display: block; }}
   .play-title {{ font-weight: 600; margin-bottom: 8px; }}
   .play-hint {{ font-size: .85em; color: #888; margin-top: 8px; }}
-  .bar {{ display: inline-block; height: 6px; border-radius: 3px;
-         background: linear-gradient(90deg,#4a9,#2c7); vertical-align: middle; }}
   .parts {{ display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: .85em; color: #888; }}
   .parts b {{ color: inherit; font-variant-numeric: tabular-nums; }}
   .foot {{ color: #888; font-size: .8em; margin-top: 28px; }}
@@ -88,7 +86,7 @@ TEMPLATE = """<!DOCTYPE html>
 </div>
 <div id="player-box" hidden></div>
 <table>
-<thead><tr><th>#</th><th style="width:14%">分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th><th></th></tr></thead>
+<thead><tr><th>#</th><th>分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th><th></th></tr></thead>
 <tbody>
 {rows}
 </tbody>
@@ -273,8 +271,7 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         parts_html = " · ".join(parts) or "暂无分项明细"
         trs.append(
             f'<tr{cls} data-live="{1 if is_live else 0}" data-age="{age}">'
-            f'<td>{i}</td><td class="score">{score:.1f} '
-            f'<span class="bar" style="width:{score * 0.9:.0f}px"></span></td>'
+            f'<td>{i}</td><td class="score">{score:.1f}</td>'
             f"<td>{song_link}</td><td>{artists}</td>"
             f"<td>{published}</td><td>{collected}</td><td>{play_btn}</td></tr>\n"
             f'<tr class="detail" hidden><td colspan="7"><div class="parts">{parts_html}</div></td></tr>'
