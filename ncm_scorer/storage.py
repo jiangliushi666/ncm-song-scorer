@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS songs (
     pop           REAL,
     artist_album_size INTEGER DEFAULT 0,
     artist_music_size INTEGER DEFAULT 0,
-    first_seen    INTEGER NOT NULL   -- s epoch, 首次入库时间
+    first_seen    INTEGER NOT NULL,  -- s epoch, 首次入库时间
+    fee           INTEGER            -- 网易云 fee：0 免费，>0 多为 VIP/数字专辑
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -61,7 +62,13 @@ class Store:
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(songs)")}
+        if "fee" not in cols:
+            self.conn.execute("ALTER TABLE songs ADD COLUMN fee INTEGER")
 
     def close(self) -> None:
         self.conn.close()
@@ -79,26 +86,28 @@ class Store:
                        publish_time=COALESCE(?, publish_time), duration_ms=?,
                        pop=COALESCE(?, pop),
                        artist_album_size=COALESCE(?, artist_album_size),
-                       artist_music_size=COALESCE(?, artist_music_size)
+                       artist_music_size=COALESCE(?, artist_music_size),
+                       fee=COALESCE(?, fee)
                    WHERE song_id=?""",
                 (row.get("name"), row.get("artists"),
                  json.dumps(row.get("artist_ids") or []), row.get("album"),
                  row.get("publish_time"), row.get("duration_ms"),
                  row.get("pop"), row.get("artist_album_size"),
-                 row.get("artist_music_size"), row["song_id"]),
+                 row.get("artist_music_size"), row.get("fee"),
+                 row["song_id"]),
             )
             self.conn.commit()
             return False
         self.conn.execute(
             """INSERT INTO songs (song_id, name, artists, artist_ids, album,
                   publish_time, duration_ms, pop, artist_album_size,
-                  artist_music_size, first_seen)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                  artist_music_size, first_seen, fee)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (row["song_id"], row.get("name", ""), row.get("artists"),
              json.dumps(row.get("artist_ids") or []), row.get("album"),
              row.get("publish_time"), row.get("duration_ms"),
              row.get("pop"), row.get("artist_album_size") or 0,
-             row.get("artist_music_size") or 0, _now()),
+             row.get("artist_music_size") or 0, _now(), row.get("fee")),
         )
         self.conn.commit()
         return True
@@ -259,7 +268,7 @@ class Store:
                       limit: int = 50) -> List[Dict[str, Any]]:
         q = (
             "SELECT s.song_id, s.score, s.ts, s.detail, g.name, g.artists, "
-            "g.publish_time "
+            "g.publish_time, g.fee "
             "FROM scores s JOIN (SELECT song_id, MAX(ts) AS mts FROM scores "
             "{mv} GROUP BY song_id) x ON s.song_id=x.song_id AND s.ts=x.mts "
             "{mvo} JOIN songs g ON g.song_id=s.song_id "

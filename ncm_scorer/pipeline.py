@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -29,6 +30,8 @@ DEFAULT_NEIGHBOR_ARTISTS = 12
 DEFAULT_NEIGHBOR_NEW = 20
 # song/detail 的资历字段常为 0，改走 /api/artist/{id}；每日上限控制请求量
 DEFAULT_MAX_ARTIST_PROFILES = 50
+# 同人多首（专辑倾销）名次衰减：第 2 首 ×0.82，第 3 首 ×0.82² …
+ARTIST_DUMP_DECAY = 0.82
 
 
 def fetch_chart_and_discover(client: NcmClient, store: Store,
@@ -165,6 +168,7 @@ def enrich_songs(client: NcmClient, store: Store, song_ids: List[int],
                 "duration_ms": d["duration_ms"], "pop": d["pop"],
                 "artist_album_size": d.get("artist_album_size"),
                 "artist_music_size": d.get("artist_music_size"),
+                "fee": d.get("fee"),
             })
             updated += 1
     log.info("enrich: songs=%d artist_profiles=%d", updated, fetched)
@@ -186,6 +190,39 @@ def take_snapshots(client: NcmClient, store: Store,
         ok += 1
     log.info("snapshots: %d ok, %d failed", ok, fail)
     return {"ok": ok, "failed": fail}
+
+
+def _lead_artist_key(song: Dict[str, Any]) -> str:
+    try:
+        ids = json.loads(song.get("artist_ids") or "[]")
+        if ids:
+            return f"id:{ids[0]}"
+    except (TypeError, ValueError):
+        pass
+    return f"name:{song.get('artists') or ''}"
+
+
+def apply_artist_diversity(results: List[Dict[str, Any]],
+                           decay: float = ARTIST_DUMP_DECAY
+                           ) -> List[Dict[str, Any]]:
+    """同人第 2 首起衰减，避免一张专辑占满 Top。最高分那首不罚。"""
+    ranked = sorted(results, key=lambda r: r["score"], reverse=True)
+    seen: Dict[str, int] = {}
+    for r in ranked:
+        key = r.get("lead_artist") or ""
+        n = seen.get(key, 0)
+        seen[key] = n + 1
+        if n < 1 or not key:
+            continue
+        factor = decay ** n
+        raw = r["score"]
+        r["score"] = round(raw * factor, 1)
+        detail = dict(r.get("detail") or {})
+        detail["raw_score"] = raw
+        detail["dump_penalty"] = round(factor, 3)
+        r["detail"] = detail
+    ranked.sort(key=lambda r: r["score"], reverse=True)
+    return ranked
 
 
 def score_all(store: Store, song_ids: List[int],

@@ -165,6 +165,15 @@ class TestParsePayloads(unittest.TestCase):
         self.assertIsNone(row["artist_album_size"])
         self.assertIsNone(row["artist_music_size"])
         self.assertEqual(row["pop"], 80.0)
+        self.assertIsNone(row["fee"])
+
+    def test_song_detail_keeps_fee(self):
+        row = parse_song_payload({
+            "id": 2, "name": "vip-song", "popularity": 90, "fee": 1,
+            "artists": [{"id": 1, "name": "A"}],
+            "album": {"name": "al"},
+        })
+        self.assertEqual(row["fee"], 1)
 
     def test_artist_profile_reads_scale(self):
         row = parse_artist_payload(
@@ -255,7 +264,9 @@ class TestSiteBuilder(unittest.TestCase):
         seed_song(store, 61, comments=[400], pop=70.0, publish_days_ago=2)
         store.conn.execute("UPDATE songs SET name=? WHERE song_id=61", ("原创新歌",))
         seed_song(store, 62, comments=[400], pop=70.0, publish_days_ago=2)
-        store.conn.execute("UPDATE songs SET name=? WHERE song_id=62", ("旧曲 (Live)",))
+        store.conn.execute(
+            "UPDATE songs SET name=?, fee=? WHERE song_id=62", ("旧曲 (Live)", 1)
+        )
         store.conn.commit()
         score_all(store, [61, 62])
         store.close()
@@ -266,6 +277,8 @@ class TestSiteBuilder(unittest.TestCase):
         self.assertIn('data-filter="week"', page)
         self.assertIn("旧曲 (Live)", page)
         self.assertIn('class="badge">Live</span>', page)
+        self.assertIn('class="badge vip">VIP</span>', page)
+        self.assertIn("去网易云播放", page)
         self.assertIn("讨论密度", page)
         self.assertIn("heuristic-v2", page)
 

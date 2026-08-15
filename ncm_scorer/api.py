@@ -54,6 +54,7 @@ def parse_song_payload(s: Dict[str, Any]) -> Dict[str, Any]:
         "pop": float(pop or 0.0),
         "artist_album_size": album_size or None,
         "artist_music_size": music_size or None,
+        "fee": int(s["fee"]) if s.get("fee") is not None else None,
     }
 
 

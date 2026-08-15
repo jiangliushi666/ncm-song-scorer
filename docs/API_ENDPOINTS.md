@@ -71,6 +71,7 @@ GET https://music.163.com/api/artist/top/song?id={artist_id}
 | `GET /api/artist/details?id=` | 空 data | 弃用，歌手规模改从歌曲详情的 artists 字段取 |
 | `GET /api/artist/get?id=` | 400 参数错误 | 弃用 |
 | `https://music.163.com/song/media/outer/url?id={id}.mp3` | 302 → 404 | 试听外链不稳定，音频特征改为本地文件模式 |
+| 第三方「解锁 VIP 完整音源」类项目 | 能拿到付费曲完整地址 | **不做**：公开榜不能绕过版权/VIP；页内只嵌官方外链，VIP 引导去网易云登录播放 |
 
 ## 变更监控建议
 

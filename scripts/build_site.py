@@ -65,7 +65,10 @@ TEMPLATE = """<!DOCTYPE html>
     font-size: 12px; line-height: 1;
   }}
   button.play:hover {{ border-color: #2b7; color: #2b7; }}
-  #player-box iframe {{ display: block; border-radius: 8px; margin-bottom: 14px; }}
+  .badge.vip {{ border-color: #c90; color: #c90; }}
+  #player-box {{ margin-bottom: 14px; }}
+  #player-box iframe {{ display: block; border-radius: 8px; }}
+  .play-hint {{ font-size: .85em; color: #888; margin-top: 8px; }}
   .bar {{ display: inline-block; height: 6px; border-radius: 3px;
          background: linear-gradient(90deg,#4a9,#2c7); vertical-align: middle; }}
   .parts {{ display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: .85em; color: #888; }}
@@ -91,7 +94,8 @@ TEMPLATE = """<!DOCTYPE html>
 </table>
 <div class="foot">
   {foot}
-  ▶ 为页面内试听，版权/VIP 歌曲为片段；点击<b>歌名</b>跳转网易云音乐可完整播放（登录态）。
+  ▶ 页内用网易云官方外链播放器试听。标了 VIP 的歌通常没有完整音源（官方限制，不是本站故障）；
+  点 ▶ 会同时给出「去网易云播放」——登录/开通后可在官方页完整听。
   点击行可展开分项明细。仅个人研究用途，数据归网易云音乐所有。
   项目：<a href="https://github.com/jiangliushi666/ncm-song-scorer">ncm-song-scorer</a>
 </div>
@@ -106,9 +110,17 @@ TEMPLATE = """<!DOCTYPE html>
       if (current === id) {{ box.hidden = !box.hidden; return; }}
       current = id;
       box.hidden = false;
+      var fee = Number(btn.getAttribute('data-fee') || 0);
+      var vip = fee > 0;
+      var ncm = 'https://music.163.com/song?id=' + id;
+      var hint = vip
+        ? '此曲为 VIP/版权曲，页内播放器经常只有片段或直接播不了。请到网易云登录后完整播放。'
+        : '若页内无声，请到网易云打开（部分曲目外链会被平台拦截）。';
       box.innerHTML = '<iframe frameborder="no" border="0" marginwidth="0" marginheight="0" ' +
         'width="100%" height="86" src="https://music.163.com/outchain/player?type=2&id=' +
-        id + '&auto=1&height=66"></iframe>';
+        id + '&auto=1&height=66"></iframe>' +
+        '<div class="play-hint">' + hint +
+        ' <a href="' + ncm + '" target="_blank" rel="noopener">去网易云播放</a></div>';
       box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
       return;
     }}
@@ -210,16 +222,27 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
         flags = title_flags(name)
         is_live = flags["is_live"] or bool(_parse_detail(r.get("detail")).get("is_live"))
         age = _age_days(r.get("publish_time"))
-        badge = '<span class="badge">Live</span>' if is_live else ""
+        fee = r.get("fee")
+        is_vip = fee is not None and int(fee) > 0
+        badges = []
+        if is_live:
+            badges.append('<span class="badge">Live</span>')
+        if is_vip:
+            badges.append('<span class="badge vip">VIP</span>')
+        badge = "".join(badges)
         cls = ' class="song top3"' if i <= 3 else ' class="song"'
         song_link = (
             f'<a href="https://music.163.com/song?id={song_id}" '
             f'target="_blank" rel="noopener">{html.escape(name)}</a>{badge}'
         )
+        play_title = (
+            "VIP/版权曲：页内可能无法播放，将提供网易云入口"
+            if is_vip else "页面内试听（官方外链）"
+        )
         play_btn = (
-            f'<button class="play" data-id="{song_id}" '
+            f'<button class="play" data-id="{song_id}" data-fee="{int(fee or 0)}" '
             f'aria-label="播放 {html.escape(name)}" '
-            f'title="页面内试听（版权/VIP 歌曲为片段）">▶</button>'
+            f'title="{play_title}">▶</button>'
         )
         detail = _parse_detail(r.get("detail"))
         parts = []
