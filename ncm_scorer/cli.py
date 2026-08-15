@@ -60,12 +60,17 @@ def main(argv=None) -> int:
             from .pipeline import fetch_chart_and_discover
             print(fetch_chart_and_discover(NcmClient(), store))
         elif args.cmd == "snapshot":
-            from .pipeline import take_snapshots
-            ids = store.tracked_song_ids(max_age_days=60)[:200]
+            from .pipeline import DEFAULT_NEW_SONG_WINDOW_DAYS, take_snapshots
+            ids = store.tracked_song_ids(
+                max_age_days=DEFAULT_NEW_SONG_WINDOW_DAYS
+            )[:200]
             print(take_snapshots(NcmClient(), store, ids))
         elif args.cmd == "score":
-            from .pipeline import score_all
-            results = score_all(store, store.tracked_song_ids(max_age_days=60)[:200])
+            from .pipeline import DEFAULT_NEW_SONG_WINDOW_DAYS, score_all
+            results = score_all(
+                store,
+                store.tracked_song_ids(max_age_days=DEFAULT_NEW_SONG_WINDOW_DAYS)[:200],
+            )
             for r in results[:20]:
                 print(f"{r['score']:>5}  {r['name']} - {r['artists']}")
         elif args.cmd == "top":

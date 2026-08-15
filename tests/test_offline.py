@@ -87,6 +87,26 @@ class TestStorage(unittest.TestCase):
         store.record_chart(3779629, 99, 3)
         self.assertEqual(len(store.chart_hits(99)), 1)
 
+    def test_window_filters_by_publish_time(self):
+        store = make_store()
+        now = time.time()
+        # 三首歌入库时间相同（现在），发布时间不同
+        store.upsert_song({  # 发布 10 天前：在 45 天窗口内
+            "song_id": 21, "name": "fresh",
+            "publish_time": int((now - 10 * 86400) * 1000)})
+        store.upsert_song({  # 发布 70 天前：超窗，应被剔除
+            "song_id": 22, "name": "old",
+            "publish_time": int((now - 70 * 86400) * 1000)})
+        store.upsert_song({  # 缺发布时间：回退按入库时间（刚入库 => 在窗口内）
+            "song_id": 23, "name": "unknown-pt"})
+        ids = store.tracked_song_ids(max_age_days=45)
+        self.assertIn(21, ids)
+        self.assertNotIn(22, ids)
+        self.assertIn(23, ids)
+        # by_publish=False 时退回旧的入库时间语义：三首都在
+        ids2 = store.tracked_song_ids(max_age_days=45, by_publish=False)
+        self.assertEqual(set(ids2), {21, 22, 23})
+
 
 if __name__ == "__main__":
     unittest.main()

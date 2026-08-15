@@ -16,8 +16,8 @@ from .storage import Store
 
 log = logging.getLogger(__name__)
 
-# 新歌定义：发行时间距今天数在此窗口内才纳入跟踪（太老的不追）
-DEFAULT_NEW_SONG_WINDOW_DAYS = 60
+# 新歌定义：按歌曲发布时间计，发行超过该天数即停止跟踪（榜单上发布较久的歌会提前退出）
+DEFAULT_NEW_SONG_WINDOW_DAYS = 45
 # 单次快照最多跟踪多少首歌（控制每日请求量：约 2 req/song -> 限速 1s 约 10 分钟）
 DEFAULT_MAX_TRACKED = 200
 

@@ -106,14 +106,24 @@ class Store:
         r = cur.fetchone()
         return dict(r) if r else None
 
-    def tracked_song_ids(self, max_age_days: float = float("inf")) -> List[int]:
-        """已跟踪歌曲（可限制入库时长，避免无限膨胀）."""
+    def tracked_song_ids(self, max_age_days: float = float("inf"),
+                         by_publish: bool = True) -> List[int]:
+        """窗口内的已跟踪歌曲.
+
+        by_publish=True 时窗口按歌曲发布时间（publish_time）计算，缺失发布
+        时间的歌回退用 first_seen；False 则按入库时间过滤。
+        """
         if max_age_days == float("inf"):
             cutoff = 0
         else:
             cutoff = _now() - int(max_age_days * 86400)
+        if by_publish:
+            # publish_time 为 ms，first_seen 为 s；COALESCE 统一成秒再比较
+            cond = "(COALESCE(publish_time, first_seen * 1000) / 1000) >= ?"
+        else:
+            cond = "first_seen >= ?"
         cur = self.conn.execute(
-            "SELECT song_id FROM songs WHERE first_seen >= ? ORDER BY song_id", (cutoff,)
+            f"SELECT song_id FROM songs WHERE {cond} ORDER BY song_id", (cutoff,)
         )
         return [r["song_id"] for r in cur.fetchall()]
 
