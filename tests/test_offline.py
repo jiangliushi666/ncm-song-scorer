@@ -298,6 +298,7 @@ class TestSiteBuilder(unittest.TestCase):
         self.assertIn("PLAY_API", page)
         self.assertIn("playSong", page)
         self.assertIn("<audio", page)
+        self.assertIn("song/media/outer/url", page)
         self.assertIn("讨论密度", page)
         self.assertIn("heuristic-v2", page)
 

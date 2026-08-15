@@ -24,7 +24,10 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: cors() });
     }
-    const id = new URL(request.url).searchParams.get("id") || "";
+    const id = (new URL(request.url).searchParams.get("id") || "").trim();
+    if (!id) {
+      return json({ ok: true, hint: "GET ?id=歌曲数字id" });
+    }
     if (!/^\d{1,20}$/.test(id)) {
       return json({ error: "bad id" }, 400);
     }

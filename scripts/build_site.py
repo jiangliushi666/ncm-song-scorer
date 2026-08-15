@@ -102,25 +102,33 @@ TEMPLATE = """<!DOCTYPE html>
   var box = document.getElementById('player-box');
   var current = null;
   var PLAY_API = {play_api};
+  function fail(name, id) {{
+    box.innerHTML = '<div class="play-title"></div><div class="play-hint">这首没有页内试听地址。</div>';
+    box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
+  }}
+  function showAudio(url, name, id, onFail) {{
+    box.innerHTML = '<div class="play-title"></div><audio controls autoplay preload="auto"></audio>';
+    box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
+    var a = box.querySelector('audio');
+    a.src = url;
+    a.onerror = function () {{ if (onFail) onFail(); }};
+  }}
   function playSong(id, name) {{
     box.hidden = false;
     box.innerHTML = '<div class="play-title"></div><div class="play-hint">正在取播放地址…</div>';
     box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
-    var done = function (url) {{
-      if (url) {{
-        box.innerHTML = '<div class="play-title"></div>' +
-          '<audio controls autoplay preload="none" src="' + url + '"></audio>';
-        box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
-        return;
-      }}
-      box.innerHTML = '<div class="play-title"></div><div class="play-hint">这首没有页内试听地址。</div>';
-      box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
-    }};
-    if (!PLAY_API) {{ done(null); return; }}
-    fetch(PLAY_API + (PLAY_API.indexOf('?') >= 0 ? '&' : '?') + 'id=' + id)
-      .then(function (r) {{ return r.json(); }})
-      .then(function (j) {{ done(j && j.url); }})
-      .catch(function () {{ done(null); }});
+    // 国内打不开 workers.dev；外链由浏览器直连 music.163.com，用听的人自己的 IP 取 CDN。
+    var outer = 'https://music.163.com/song/media/outer/url?id=' + id + '.mp3';
+    showAudio(outer, name, id, function () {{
+      if (!PLAY_API) {{ fail(name, id); return; }}
+      fetch(PLAY_API + (PLAY_API.indexOf('?') >= 0 ? '&' : '?') + 'id=' + id)
+        .then(function (r) {{ return r.json(); }})
+        .then(function (j) {{
+          if (j && j.url) showAudio(j.url, name, id, function () {{ fail(name, id); }});
+          else fail(name, id);
+        }})
+        .catch(function () {{ fail(name, id); }});
+    }});
     box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
   }}
   document.addEventListener('click', function (e) {{

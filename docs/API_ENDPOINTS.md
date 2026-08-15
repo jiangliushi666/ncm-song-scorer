@@ -69,8 +69,8 @@ Cookie: os=pc; appver=8.10.35
 
 - 返回匿名可听的 128k `url`（和网页版未登录同一档）。`fee=8` 的曲目也经常有地址。
 - CDN 链接常是 `http://`，Pages 是 https，必须改成 `https://`。
-- 浏览器没有 CORS，GitHub Pages 不能直连；由 `workers/play.js` 代取。
-- **不是** VIP 解锁：拿不到地址的歌仍然只能去网易云登录听。
+- 国内常打不开 `workers.dev`，页内优先用官网外链 `GET /song/media/outer/url?id={id}.mp3`（浏览器直连，用听的人自己的 IP）。
+- Worker 只作海外回退。**不是** VIP 解锁。
 
 ## ❌ 实测不可用（避坑记录）
 
