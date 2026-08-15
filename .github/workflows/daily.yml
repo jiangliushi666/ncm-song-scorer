@@ -20,6 +20,7 @@ jobs:
     env:
       DATA_REPO: ${{ github.repository_owner }}/ncm-scorer-data
       DATA_TOKEN: ${{ secrets.DATA_PUSH_TOKEN }}
+      PLAY_API: ${{ vars.PLAY_API || 'https://ncm-scorer-play.2383566697.workers.dev/' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +81,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          python scripts/build_site.py --db ncm_scorer.db --out site/index.html --top 50
+          python scripts/build_site.py --db ncm_scorer.db --out site/index.html --top 50 --play-api "${PLAY_API:-https://ncm-scorer-play.2383566697.workers.dev/}"
           cd site
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"

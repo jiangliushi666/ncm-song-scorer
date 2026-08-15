@@ -1,0 +1,21 @@
+name: deploy-play-worker
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - "workers/play.js"
+      - "wrangler.toml"
+      - ".github/workflows/deploy-play.yml"
+
+jobs:
+  deploy:
+    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

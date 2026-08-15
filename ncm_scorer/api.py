@@ -6,6 +6,7 @@
 - GET /api/artist/{id}                       歌手档案（albumSize/musicSize，资历真值）
 - GET /api/v1/resource/comments/R_SO_4_{id}  评论总数
 - GET /api/artist/top/song?id={artist_id}    歌手热门曲（邻域负样本）
+- GET /api/song/enhance/player/url           官方 128k 播放地址（匿名可听档）
 
 不需要 weapi 加密、不需要登录；注意控制请求频率（默认限速 1 req/s 量级），
 仅用于个人研究。
@@ -26,7 +27,12 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
-DEFAULT_HEADERS = {"User-Agent": UA, "Referer": "https://music.163.com"}
+DEFAULT_HEADERS = {
+    "User-Agent": UA,
+    "Referer": "https://music.163.com",
+    # 官网匿名态也会带的设备标记，不是用户登录 Cookie；128k 播放地址靠它
+    "Cookie": "os=pc; appver=8.10.35",
+}
 
 
 class NcmApiError(RuntimeError):
@@ -55,6 +61,29 @@ def parse_song_payload(s: Dict[str, Any]) -> Dict[str, Any]:
         "artist_album_size": album_size or None,
         "artist_music_size": music_size or None,
         "fee": int(s["fee"]) if s.get("fee") is not None else None,
+    }
+
+
+def https_play_url(url: Optional[str]) -> Optional[str]:
+    """官方接口常返回 http CDN，GitHub Pages 是 https，必须升协议否则浏览器拦截。"""
+    if not url:
+        return None
+    if url.startswith("http://"):
+        return "https://" + url[7:]
+    return url
+
+
+def parse_play_payload(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """解析 /api/song/enhance/player/url 的第一条。"""
+    item = (data.get("data") or [None])[0] or {}
+    url = https_play_url(item.get("url"))
+    if not url:
+        return None
+    return {
+        "url": url,
+        "br": item.get("br"),
+        "fee": item.get("fee"),
+        "size": item.get("size"),
     }
 
 
@@ -167,6 +196,14 @@ class NcmClient:
                 "duration_ms": s.get("duration") or s.get("dt"),
             })
         return parsed
+
+    def song_play_url(self, song_id: int) -> Optional[Dict[str, Any]]:
+        """官方匿名 128k 播放地址。无地址（真·无试听权）返回 None。"""
+        data = self._get(
+            "/song/enhance/player/url",
+            {"id": song_id, "ids": json.dumps([song_id]), "br": 128000},
+        )
+        return parse_play_payload(data)
 
     def comments_total(self, song_id: int) -> Optional[int]:
         """评论总数；拉取失败返回 None（不中断流程）."""

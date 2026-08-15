@@ -1,0 +1,4 @@
+name = "ncm-scorer-play"
+main = "workers/play.js"
+compatibility_date = "2026-08-15"
+workers_dev = true

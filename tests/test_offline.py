@@ -13,7 +13,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ncm_scorer.api import parse_artist_payload, parse_song_payload  # noqa: E402
+from ncm_scorer.api import (  # noqa: E402
+    https_play_url, parse_artist_payload, parse_play_payload, parse_song_payload,
+)
 from ncm_scorer.features import build_features, title_flags          # noqa: E402
 from ncm_scorer.model import build_labels                            # noqa: E402
 from ncm_scorer.pipeline import fill_artist_scale, neighbor_candidates  # noqa: E402
@@ -183,6 +185,21 @@ class TestParsePayloads(unittest.TestCase):
         self.assertEqual(row["album_size"], 123)
         self.assertEqual(row["music_size"], 159)
 
+    def test_https_play_url_upgrades_http(self):
+        self.assertEqual(
+            https_play_url("http://m801.music.126.net/a.mp3"),
+            "https://m801.music.126.net/a.mp3",
+        )
+        self.assertIsNone(https_play_url(None))
+        self.assertIsNone(https_play_url(""))
+
+    def test_parse_play_payload(self):
+        got = parse_play_payload({
+            "data": [{"url": "http://m801.music.126.net/a.mp3", "br": 128000, "fee": 8}],
+        })
+        self.assertEqual(got["url"], "https://m801.music.126.net/a.mp3")
+        self.assertIsNone(parse_play_payload({"data": [{"url": None}]}))
+
     def test_fill_artist_scale(self):
         details = [{
             "song_id": 1, "artist_ids": [9],
@@ -279,6 +296,8 @@ class TestSiteBuilder(unittest.TestCase):
         self.assertIn('class="badge">Live</span>', page)
         self.assertIn('class="badge vip">VIP</span>', page)
         self.assertIn("去网易云播放", page)
+        self.assertIn("PLAY_API", page)
+        self.assertIn("playSong", page)
         self.assertIn("讨论密度", page)
         self.assertIn("heuristic-v2", page)
 

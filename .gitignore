@@ -14,6 +14,9 @@ model.pkl
 model.pkl.meta.json
 site/
 
+# Cloudflare Wrangler 本地缓存
+.wrangler/
+
 # IDE / OS
 .idea/
 .vscode/

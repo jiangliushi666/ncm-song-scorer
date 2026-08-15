@@ -60,6 +60,18 @@ GET https://music.163.com/api/artist/top/song?id={artist_id}
 - daily 流程用来发现「上榜歌手的其他近作、但未进新歌榜」的歌，作为 ML 负样本
 - 每日上限约 12 位歌手 / 20 首新入库，避免放大请求量
 
+### 5. 官方播放地址（页内试听）
+
+```
+GET https://music.163.com/api/song/enhance/player/url?id={id}&ids=[{id}]&br=128000
+Cookie: os=pc; appver=8.10.35
+```
+
+- 返回匿名可听的 128k `url`（和网页版未登录同一档）。`fee=8` 的曲目也经常有地址。
+- CDN 链接常是 `http://`，Pages 是 https，必须改成 `https://`。
+- 浏览器没有 CORS，GitHub Pages 不能直连；由 `workers/play.js` 代取。
+- **不是** VIP 解锁：拿不到地址的歌仍然只能去网易云登录听。
+
 ## ❌ 实测不可用（避坑记录）
 
 | 端点 | 结果 | 结论 |

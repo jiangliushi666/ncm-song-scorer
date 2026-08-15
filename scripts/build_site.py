@@ -66,8 +66,10 @@ TEMPLATE = """<!DOCTYPE html>
   }}
   button.play:hover {{ border-color: #2b7; color: #2b7; }}
   .badge.vip {{ border-color: #c90; color: #c90; }}
-  #player-box {{ margin-bottom: 14px; }}
+  #player-box {{ margin-bottom: 14px; padding: 10px 12px; border: 1px solid #8884; border-radius: 10px; }}
+  #player-box audio {{ width: 100%; display: block; }}
   #player-box iframe {{ display: block; border-radius: 8px; }}
+  .play-title {{ font-weight: 600; margin-bottom: 8px; }}
   .play-hint {{ font-size: .85em; color: #888; margin-top: 8px; }}
   .bar {{ display: inline-block; height: 6px; border-radius: 3px;
          background: linear-gradient(90deg,#4a9,#2c7); vertical-align: middle; }}
@@ -94,14 +96,49 @@ TEMPLATE = """<!DOCTYPE html>
 </table>
 <div class="foot">
   {foot}
-  ▶ 页内用网易云官方外链播放器试听。标了 VIP 的歌通常没有完整音源（官方限制，不是本站故障）；
-  点 ▶ 会同时给出「去网易云播放」——登录/开通后可在官方页完整听。
-  点击行可展开分项明细。仅个人研究用途，数据归网易云音乐所有。
+  ▶ 页内走官网匿名 128k 播放地址（和网页版未登录能听的是同一档），不是破解 VIP。
+  若仍无声，点「去网易云播放」用登录态听。点击行可展开分项明细。仅个人研究用途，数据归网易云音乐所有。
   项目：<a href="https://github.com/jiangliushi666/ncm-song-scorer">ncm-song-scorer</a>
 </div>
 <script>
   var box = document.getElementById('player-box');
   var current = null;
+  var PLAY_API = {play_api};
+  function ncmLink(id) {{
+    return 'https://music.163.com/song?id=' + id;
+  }}
+  function hintHtml(id, extra) {{
+    return '<div class="play-hint">' + (extra || '') +
+      ' <a href="' + ncmLink(id) + '" target="_blank" rel="noopener">去网易云播放</a></div>';
+  }}
+  function showIframe(id, extra) {{
+    box.innerHTML = '<iframe frameborder="no" border="0" marginwidth="0" marginheight="0" ' +
+      'width="100%" height="86" src="https://music.163.com/outchain/player?type=2&id=' +
+      id + '&auto=1&height=66"></iframe>' + hintHtml(id, extra);
+  }}
+  function playSong(id, name, fee) {{
+    box.hidden = false;
+    box.innerHTML = '<div class="play-title"></div><div class="play-hint">正在取官方播放地址…</div>';
+    box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
+    var done = function (url) {{
+      if (url) {{
+        box.innerHTML = '<div class="play-title"></div>' +
+          '<audio controls autoplay preload="none" src="' + url + '"></audio>' +
+          hintHtml(id, '官网匿名 128k。若无声再试网易云。');
+        box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
+        return;
+      }}
+      showIframe(id, fee > 0
+        ? '未拿到官方地址，回退外链播放器（VIP 曲可能仍无声）。'
+        : '未拿到官方地址，回退外链播放器。');
+    }};
+    if (!PLAY_API) {{ done(null); return; }}
+    fetch(PLAY_API + (PLAY_API.indexOf('?') >= 0 ? '&' : '?') + 'id=' + id)
+      .then(function (r) {{ return r.json(); }})
+      .then(function (j) {{ done(j && j.url); }})
+      .catch(function () {{ done(null); }});
+    box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+  }}
   document.addEventListener('click', function (e) {{
     var btn = e.target.closest('button.play');
     if (btn) {{
@@ -109,19 +146,7 @@ TEMPLATE = """<!DOCTYPE html>
       var id = btn.getAttribute('data-id');
       if (current === id) {{ box.hidden = !box.hidden; return; }}
       current = id;
-      box.hidden = false;
-      var fee = Number(btn.getAttribute('data-fee') || 0);
-      var vip = fee > 0;
-      var ncm = 'https://music.163.com/song?id=' + id;
-      var hint = vip
-        ? '此曲为 VIP/版权曲，页内播放器经常只有片段或直接播不了。请到网易云登录后完整播放。'
-        : '若页内无声，请到网易云打开（部分曲目外链会被平台拦截）。';
-      box.innerHTML = '<iframe frameborder="no" border="0" marginwidth="0" marginheight="0" ' +
-        'width="100%" height="86" src="https://music.163.com/outchain/player?type=2&id=' +
-        id + '&auto=1&height=66"></iframe>' +
-        '<div class="play-hint">' + hint +
-        ' <a href="' + ncm + '" target="_blank" rel="noopener">去网易云播放</a></div>';
-      box.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
+      playSong(id, btn.getAttribute('data-name') || '', Number(btn.getAttribute('data-fee') || 0));
       return;
     }}
     if (e.target.closest('a')) return;
@@ -202,7 +227,11 @@ def _pick_rows(store: Store, top_n: int):
     return [], "", "数据库中还没有打分记录。"
 
 
-def build(db_path: str, out_path: str, top_n: int = 50) -> int:
+DEFAULT_PLAY_API = "https://ncm-scorer-play.2383566697.workers.dev/"
+
+
+def build(db_path: str, out_path: str, top_n: int = 50,
+          play_api: str = DEFAULT_PLAY_API) -> int:
     store = Store(db_path)
     try:
         rows, model_label, foot = _pick_rows(store, top_n)
@@ -241,6 +270,7 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
         )
         play_btn = (
             f'<button class="play" data-id="{song_id}" data-fee="{int(fee or 0)}" '
+            f'data-name="{html.escape(name)}" '
             f'aria-label="播放 {html.escape(name)}" '
             f'title="{play_title}">▶</button>'
         )
@@ -264,6 +294,7 @@ def build(db_path: str, out_path: str, top_n: int = 50) -> int:
     page = TEMPLATE.format(
         updated=updated,
         model=html.escape(model_label),
+        play_api=json.dumps(play_api or ""),
         rows="\n".join(trs),
         foot=foot,
         ldjson=json.dumps(
@@ -284,8 +315,10 @@ def main() -> int:
     parser.add_argument("--db", default="ncm_scorer.db")
     parser.add_argument("--out", default="site/index.html")
     parser.add_argument("--top", type=int, default=50)
+    parser.add_argument("--play-api", default=os.environ.get("PLAY_API", DEFAULT_PLAY_API),
+                        help="官方播放地址代理（Cloudflare Worker）")
     args = parser.parse_args()
-    return build(args.db, args.out, args.top)
+    return build(args.db, args.out, args.top, play_api=args.play_api)
 
 
 if __name__ == "__main__":
