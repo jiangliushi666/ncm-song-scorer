@@ -13,11 +13,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ncm_scorer.features import build_features, title_flags  # noqa: E402
-from ncm_scorer.model import build_labels                    # noqa: E402
-from ncm_scorer.pipeline import neighbor_candidates          # noqa: E402
-from ncm_scorer.scoring import LIVE_PENALTY, heuristic_score # noqa: E402
-from ncm_scorer.storage import Store                         # noqa: E402
+from ncm_scorer.api import parse_artist_payload, parse_song_payload  # noqa: E402
+from ncm_scorer.features import build_features, title_flags          # noqa: E402
+from ncm_scorer.model import build_labels                            # noqa: E402
+from ncm_scorer.pipeline import fill_artist_scale, neighbor_candidates  # noqa: E402
+from ncm_scorer.scoring import LIVE_PENALTY, heuristic_score         # noqa: E402
+from ncm_scorer.storage import Store                                 # noqa: E402
 
 
 def make_store() -> Store:
@@ -151,6 +152,35 @@ class TestLabels(unittest.TestCase):
         self.assertEqual(labels[51], 1)
         self.assertEqual(labels[52], 0)
         self.assertEqual(labels[53], 0)
+
+
+class TestParsePayloads(unittest.TestCase):
+    def test_song_detail_zero_scale_is_unknown(self):
+        row = parse_song_payload({
+            "id": 1, "name": "x", "popularity": 80,
+            "artists": [{"id": 9, "name": "A", "albumSize": 0, "musicSize": 0}],
+            "album": {"name": "al", "publishTime": 1},
+            "duration": 1000,
+        })
+        self.assertIsNone(row["artist_album_size"])
+        self.assertIsNone(row["artist_music_size"])
+        self.assertEqual(row["pop"], 80.0)
+
+    def test_artist_profile_reads_scale(self):
+        row = parse_artist_payload(
+            {"artist": {"id": 9, "name": "A", "albumSize": 123, "musicSize": 159}},
+            9,
+        )
+        self.assertEqual(row["album_size"], 123)
+        self.assertEqual(row["music_size"], 159)
+
+    def test_fill_artist_scale(self):
+        details = [{
+            "song_id": 1, "artist_ids": [9],
+            "artist_album_size": None, "artist_music_size": None,
+        }]
+        fill_artist_scale(details, {9: {"album_size": 10, "music_size": 40}})
+        self.assertEqual(details[0]["artist_music_size"], 40)
 
 
 class TestNeighbors(unittest.TestCase):

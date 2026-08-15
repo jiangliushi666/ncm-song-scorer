@@ -2,7 +2,8 @@
 
 所有端点均经实测（2026-08-14，详见 docs/API_ENDPOINTS.md）：
 - GET /api/playlist/detail?id=3779629        新歌榜 100 首
-- GET /api/song/detail/?id={id}&ids=[{id}]   歌曲详情（热度 pop、专辑发行时间、歌手规模）
+- GET /api/song/detail/?id={id}&ids=[{id}]   歌曲详情（热度 pop、专辑发行时间）
+- GET /api/artist/{id}                       歌手档案（albumSize/musicSize，资历真值）
 - GET /api/v1/resource/comments/R_SO_4_{id}  评论总数
 - GET /api/artist/top/song?id={artist_id}    歌手热门曲（邻域负样本）
 
@@ -30,6 +31,41 @@ DEFAULT_HEADERS = {"User-Agent": UA, "Referer": "https://music.163.com"}
 
 class NcmApiError(RuntimeError):
     pass
+
+
+def parse_song_payload(s: Dict[str, Any]) -> Dict[str, Any]:
+    """把歌曲详情 JSON 收成内部字段。song/detail 里 albumSize/musicSize 常为 0 占位，0 视为未知。"""
+    artists = s.get("artists") or s.get("ar") or []
+    lead = artists[0] if artists else {}
+    album = s.get("album") or s.get("al") or {}
+    album_size = int(lead.get("albumSize") or 0)
+    music_size = int(lead.get("musicSize") or 0)
+    pop = s.get("popularity")
+    if pop is None:
+        pop = s.get("pop") or 0.0
+    return {
+        "song_id": s["id"],
+        "name": s.get("name", ""),
+        "artists": "/".join(a.get("name", "") for a in artists),
+        "artist_ids": [a["id"] for a in artists if a.get("id")],
+        "album": album.get("name", ""),
+        "publish_time": album.get("publishTime") or s.get("publishTime"),
+        "duration_ms": s.get("duration") or s.get("dt"),
+        "pop": float(pop or 0.0),
+        "artist_album_size": album_size or None,
+        "artist_music_size": music_size or None,
+    }
+
+
+def parse_artist_payload(data: Dict[str, Any], artist_id: int) -> Dict[str, Any]:
+    """从 /api/artist/{id} 取资历真值。"""
+    a = data.get("artist") or {}
+    return {
+        "artist_id": int(a.get("id") or artist_id),
+        "name": a.get("name") or "",
+        "album_size": int(a.get("albumSize") or 0),
+        "music_size": int(a.get("musicSize") or 0),
+    }
 
 
 class NcmClient:
@@ -105,24 +141,12 @@ class NcmClient:
             {"id": song_ids[0], "ids": json.dumps(list(song_ids))},
         )
         songs = data.get("songs") or []
-        out: List[Dict[str, Any]] = []
-        for s in songs:
-            artists = s.get("artists") or []
-            lead = artists[0] if artists else {}
-            album = s.get("album") or {}
-            out.append({
-                "song_id": s["id"],
-                "name": s.get("name", ""),
-                "artists": "/".join(a.get("name", "") for a in artists),
-                "artist_ids": [a["id"] for a in artists if a.get("id")],
-                "album": album.get("name", ""),
-                "publish_time": album.get("publishTime"),
-                "duration_ms": s.get("duration"),
-                "pop": float(s.get("popularity") or 0.0),
-                "artist_album_size": int(lead.get("albumSize") or 0),
-                "artist_music_size": int(lead.get("musicSize") or 0),
-            })
-        return out
+        return [parse_song_payload(s) for s in songs]
+
+    def artist_profile(self, artist_id: int) -> Dict[str, Any]:
+        """歌手档案：albumSize / musicSize 以该端点为准（song/detail 里经常是 0）。"""
+        data = self._get(f"/artist/{artist_id}")
+        return parse_artist_payload(data, artist_id)
 
     def artist_top_songs(self, artist_id: int) -> List[Dict[str, Any]]:
         """歌手热门曲目（明文接口，见 docs/API_ENDPOINTS.md §4）."""

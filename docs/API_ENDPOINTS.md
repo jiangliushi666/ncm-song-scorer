@@ -27,9 +27,19 @@ GET https://music.163.com/api/playlist/detail?id=3779629
 GET https://music.163.com/api/song/detail/?id={first_id}&ids=[{id1},{id2},...]
 ```
 
-- 关键字段：`popularity`（平台热度 0-100）、`album.publishTime`（发行时间 ms）、
-  `artists[0].albumSize / musicSize`（歌手专辑数/单曲数，资历代理）
+- 关键字段：`popularity`（平台热度 0-100）、`album.publishTime`（发行时间 ms）
+- `artists[0].albumSize / musicSize` **经常是 0 占位**，不能当资历真值
 - 实测：海阔天空 → `{"pop":100.0,"publishTime":747504000000}`
+
+### 2b. 歌手档案（资历真值）
+
+```
+GET https://music.163.com/api/artist/{artist_id}
+```
+
+- 关键字段：`artist.albumSize` / `artist.musicSize`
+- 实测：某制作人 → `{"albumSize":123,"musicSize":159}`（同人在 song/detail 里是 0）
+- daily 对缺资历的主歌手拉取，每日上限 50 人
 
 ### 3. 评论总数
 

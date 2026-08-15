@@ -27,6 +27,8 @@ DEFAULT_MAX_TRACKED = 200
 # 歌手邻域负样本：每日最多拉多少位歌手、入库多少首未上榜近作
 DEFAULT_NEIGHBOR_ARTISTS = 12
 DEFAULT_NEIGHBOR_NEW = 20
+# song/detail 的资历字段常为 0，改走 /api/artist/{id}；每日上限控制请求量
+DEFAULT_MAX_ARTIST_PROFILES = 50
 
 
 def fetch_chart_and_discover(client: NcmClient, store: Store,
@@ -109,8 +111,29 @@ def discover_artist_neighbors(client: NcmClient, store: Store,
     return {"neighbor_artists": fetched, "neighbor_new": added}
 
 
-def enrich_songs(client: NcmClient, store: Store, song_ids: List[int]) -> None:
-    """批量补全歌曲详情（pop、歌手规模、发行时间）."""
+def fill_artist_scale(details: List[Dict[str, Any]],
+                      profiles: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """用歌手档案回填 song/detail 里缺失的资历（纯函数，供离线测试）."""
+    for d in details:
+        if d.get("artist_music_size"):
+            continue
+        aids = d.get("artist_ids") or []
+        if not aids:
+            continue
+        prof = profiles.get(int(aids[0]))
+        if not prof:
+            continue
+        d["artist_album_size"] = prof.get("album_size") or None
+        d["artist_music_size"] = prof.get("music_size") or None
+    return details
+
+
+def enrich_songs(client: NcmClient, store: Store, song_ids: List[int],
+                 max_artist_profiles: int = DEFAULT_MAX_ARTIST_PROFILES) -> Dict[str, int]:
+    """批量补全歌曲详情；资历走歌手档案，不信 song/detail 里的 0 占位."""
+    profiles: Dict[int, Dict[str, Any]] = {}
+    fetched = 0
+    updated = 0
     for i in range(0, len(song_ids), 100):
         batch = song_ids[i:i + 100]
         try:
@@ -118,15 +141,34 @@ def enrich_songs(client: NcmClient, store: Store, song_ids: List[int]) -> None:
         except Exception as e:  # noqa: BLE001
             log.warning("enrich batch failed: %s", e)
             continue
+        need_aids = []
+        for d in details:
+            if d.get("artist_music_size"):
+                continue
+            aids = d.get("artist_ids") or []
+            if aids and int(aids[0]) not in profiles and int(aids[0]) not in need_aids:
+                need_aids.append(int(aids[0]))
+        for aid in need_aids:
+            if fetched >= max_artist_profiles:
+                break
+            try:
+                profiles[aid] = client.artist_profile(aid)
+                fetched += 1
+            except Exception as e:  # noqa: BLE001
+                log.warning("artist_profile(%s) failed: %s", aid, e)
+        fill_artist_scale(details, profiles)
         for d in details:
             store.upsert_song({
                 "song_id": d["song_id"], "name": d["name"],
                 "artists": d["artists"], "artist_ids": d["artist_ids"],
                 "album": d["album"], "publish_time": d["publish_time"],
                 "duration_ms": d["duration_ms"], "pop": d["pop"],
-                "artist_album_size": d["artist_album_size"],
-                "artist_music_size": d["artist_music_size"],
+                "artist_album_size": d.get("artist_album_size"),
+                "artist_music_size": d.get("artist_music_size"),
             })
+            updated += 1
+    log.info("enrich: songs=%d artist_profiles=%d", updated, fetched)
+    return {"enriched": updated, "artist_profiles": fetched}
 
 
 def take_snapshots(client: NcmClient, store: Store,
@@ -203,7 +245,7 @@ def run_daily(client: NcmClient, store: Store,
         if song.get("pop") is None or not song.get("artist_music_size"):
             need_enrich.append(sid)
     if need_enrich:
-        enrich_songs(client, store, need_enrich[:max_tracked])
+        stats.update(enrich_songs(client, store, need_enrich[:max_tracked]))
     ids = store.tracked_song_ids(max_age_days=DEFAULT_NEW_SONG_WINDOW_DAYS)[:max_tracked]
     stats.update(take_snapshots(client, store, ids))
     scored = score_all(store, ids)
