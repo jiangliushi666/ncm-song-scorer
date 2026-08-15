@@ -7,7 +7,7 @@ on:
     - cron: "30 1 * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: daily-collect
@@ -69,3 +69,18 @@ jobs:
           git add ncm_scorer.db
           git commit -m "daily snapshot $(date -u +%F)" || echo "no changes"
           git push -u origin main
+
+      - name: Publish ranking site to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          python scripts/build_site.py --db ncm_scorer.db --out site/index.html --top 50
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git add index.html
+          git commit -q -m "ranking site $(date -u '+%F %T')"
+          git push -q -f origin gh-pages
