@@ -236,9 +236,9 @@ TEMPLATE = """<!DOCTYPE html>
 </header>
 <div class="toolbar" id="filters">
   <div class="filter-group" data-group="time">
-    <span class="filter-label">时间</span>
+    <span class="filter-label">发行</span>
     <div class="filters">
-      <button type="button" data-time="all" class="on">不限时间</button>
+      <button type="button" data-time="all" class="on">本榜全部</button>
       <button type="button" data-time="week">近 7 天</button>
     </div>
   </div>

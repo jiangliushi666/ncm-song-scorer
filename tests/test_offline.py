@@ -290,7 +290,7 @@ class TestSiteBuilder(unittest.TestCase):
         out = os.path.join(tempfile.mkdtemp(), "index.html")
         build(db, out, top_n=10)
         page = open(out, encoding="utf-8").read()
-        self.assertIn("不限时间", page)
+        self.assertIn("本榜全部", page)
         self.assertIn("近 7 天", page)
         self.assertIn("不含 Live", page)
         self.assertIn('data-time="week"', page)
