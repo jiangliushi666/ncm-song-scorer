@@ -64,6 +64,14 @@ def parse_song_payload(s: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def is_vip_fee(fee) -> bool:
+    """只有会员曲/数字专辑才标 VIP。0 免费，8 低音质免费可听，都不能算 VIP。"""
+    try:
+        return int(fee) in (1, 4)
+    except (TypeError, ValueError):
+        return False
+
+
 def https_play_url(url: Optional[str]) -> Optional[str]:
     """官方接口常返回 http CDN，GitHub Pages 是 https，必须升协议否则浏览器拦截。"""
     if not url:

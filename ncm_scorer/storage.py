@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS songs (
     artist_album_size INTEGER DEFAULT 0,
     artist_music_size INTEGER DEFAULT 0,
     first_seen    INTEGER NOT NULL,  -- s epoch, 首次入库时间
-    fee           INTEGER            -- 网易云 fee：0 免费，>0 多为 VIP/数字专辑
+    fee           INTEGER            -- 0 免费，1 会员曲，4 数字专辑，8 低音质免费
 );
 
 CREATE TABLE IF NOT EXISTS snapshots (

@@ -14,7 +14,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ncm_scorer.api import (  # noqa: E402
-    https_play_url, parse_artist_payload, parse_play_payload, parse_song_payload,
+    https_play_url, is_vip_fee, parse_artist_payload, parse_play_payload,
+    parse_song_payload,
 )
 from ncm_scorer.features import build_features, title_flags          # noqa: E402
 from ncm_scorer.model import build_labels                            # noqa: E402
@@ -176,6 +177,11 @@ class TestParsePayloads(unittest.TestCase):
             "album": {"name": "al"},
         })
         self.assertEqual(row["fee"], 1)
+        self.assertTrue(is_vip_fee(1))
+        self.assertTrue(is_vip_fee(4))
+        self.assertFalse(is_vip_fee(0))
+        self.assertFalse(is_vip_fee(8))
+        self.assertFalse(is_vip_fee(None))
 
     def test_artist_profile_reads_scale(self):
         row = parse_artist_payload(
@@ -279,7 +285,7 @@ class TestSiteBuilder(unittest.TestCase):
         db = os.path.join(tempfile.mkdtemp(), "t.db")
         store = Store(db)
         seed_song(store, 61, comments=[400], pop=70.0, publish_days_ago=2)
-        store.conn.execute("UPDATE songs SET name=? WHERE song_id=61", ("原创新歌",))
+        store.conn.execute("UPDATE songs SET name=?, fee=? WHERE song_id=61", ("原创新歌", 8))
         seed_song(store, 62, comments=[400], pop=70.0, publish_days_ago=2)
         store.conn.execute(
             "UPDATE songs SET name=?, fee=? WHERE song_id=62", ("旧曲 (Live)", 1)
@@ -297,9 +303,10 @@ class TestSiteBuilder(unittest.TestCase):
         self.assertIn('data-time="week"', page)
         self.assertIn('data-live="studio"', page)
         self.assertIn("旧曲 (Live)", page)
+        self.assertIn("原创新歌", page)
         self.assertIn("<article", page)
         self.assertIn('class="badge">Live</span>', page)
-        self.assertIn('class="badge vip">VIP</span>', page)
+        self.assertEqual(page.count('class="badge vip">VIP</span>'), 1)
         self.assertIn("PLAY_API", page)
         self.assertIn("playSong", page)
         self.assertIn("<audio", page)

@@ -14,6 +14,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from ncm_scorer.api import is_vip_fee  # noqa: E402
 from ncm_scorer.features import title_flags  # noqa: E402
 from ncm_scorer.storage import Store  # noqa: E402
 
@@ -423,7 +424,7 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         is_live = flags["is_live"] or bool(_parse_detail(r.get("detail")).get("is_live"))
         age = _age_days(r.get("publish_time"))
         fee = r.get("fee")
-        is_vip = fee is not None and int(fee) > 0
+        is_vip = is_vip_fee(fee)
         badges = []
         if is_live:
             badges.append('<span class="badge">Live</span>')
