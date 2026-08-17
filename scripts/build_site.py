@@ -232,13 +232,13 @@ TEMPLATE = """<!DOCTYPE html>
 <header class="hero">
   <p class="kicker">ncm-scorer</p>
   <h1>新歌爆款潜力榜</h1>
-  <p class="meta">更新于 {updated} · {model} · 数据来自网易云音乐新歌榜，每日自动更新</p>
+  <p class="meta">更新于 {updated} · {model} · 数据来自网易云音乐新歌榜（近 30 天发行），每日自动更新</p>
 </header>
 <div class="toolbar" id="filters">
   <div class="filter-group" data-group="time">
     <span class="filter-label">发行</span>
     <div class="filters">
-      <button type="button" data-time="all" class="on">本榜全部</button>
+      <button type="button" data-time="month" class="on">近 30 天</button>
       <button type="button" data-time="week">近 7 天</button>
     </div>
   </div>
@@ -311,13 +311,13 @@ TEMPLATE = """<!DOCTYPE html>
     var detail = song.querySelector('.detail');
     if (detail) detail.hidden = !detail.hidden;
   }});
-  var timeFilter = 'all';
+  var timeFilter = 'month';
   var liveFilter = 'all';
   function applyFilters() {{
     Array.prototype.forEach.call(document.querySelectorAll('.song'), function (card) {{
       var live = card.getAttribute('data-live') === '1';
       var age = Number(card.getAttribute('data-age') || 999);
-      var hide = (timeFilter === 'week' && age > 7) || (liveFilter === 'studio' && live);
+      var hide = (timeFilter === 'week' && age > 7) || (timeFilter === 'month' && age > 30) || (liveFilter === 'studio' && live);
       card.classList.toggle('hidden', hide);
       var d = card.querySelector('.detail');
       if (d && hide) d.hidden = true;
