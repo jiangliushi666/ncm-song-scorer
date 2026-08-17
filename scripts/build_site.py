@@ -33,69 +33,67 @@ TEMPLATE = """<!DOCTYPE html>
 <title>ncm-scorer · 网易云新歌爆款潜力榜</title>
 <style>
   :root {{
-    color-scheme: light dark;
-    --bg: #f4f1ea;
-    --card: #fffcf6;
-    --ink: #1d1c19;
-    --muted: #6f6b62;
-    --line: #e4dfd4;
-    --accent: #1a7f56;
-    --gold: #b8860b;
-    --vip: #b26a00;
-    --shadow: 0 10px 30px #1d1c1912;
-  }}
-  @media (prefers-color-scheme: dark) {{
-    :root {{
-      --bg: #161513;
-      --card: #1f1e1b;
-      --ink: #f3efe6;
-      --muted: #a39d90;
-      --line: #333029;
-      --accent: #3dba84;
-      --gold: #e0b84e;
-      --vip: #e09a3e;
-      --shadow: 0 10px 30px #0008;
-    }}
+    color-scheme: dark;
+    --bg: #0b0b0d;
+    --card: #141416;
+    --ink: #f4f4f5;
+    --muted: #8d8d93;
+    --line: #26262b;
+    --accent: #ec4141;
+    --gold: #f0c36a;
+    --vip: #f0a14a;
   }}
   * {{ box-sizing: border-box; }}
   body {{
     margin: 0;
-    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: var(--bg);
+    min-height: 100vh;
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 420px at 10% -10%, #3a121480, transparent 55%),
+      var(--bg);
     color: var(--ink);
-    line-height: 1.55;
+    line-height: 1.5;
   }}
   .wrap {{
-    width: min(920px, calc(100% - 32px));
+    width: min(980px, calc(100% - 28px));
     margin: 0 auto;
-    padding: 28px 0 72px;
+    padding: 36px 0 80px;
   }}
   .hero {{
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    padding: 22px 22px 18px;
-    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line);
   }}
   .kicker {{
-    margin: 0 0 6px;
+    margin: 0 0 8px;
     color: var(--accent);
-    font-size: .75em;
-    letter-spacing: .12em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .16em;
   }}
   h1 {{
-    margin: 0 0 8px;
-    font-size: clamp(1.35rem, 4vw, 1.85rem);
-    letter-spacing: -.02em;
+    margin: 0;
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    font-weight: 780;
+    letter-spacing: -.04em;
+    line-height: 1.1;
   }}
-  .meta {{ margin: 0; color: var(--muted); font-size: .88em; }}
+  .meta {{
+    margin: 0;
+    max-width: 280px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: right;
+  }}
   .toolbar {{
     display: flex;
     align-items: center;
-    gap: 10px 18px;
+    gap: 14px 20px;
     flex-wrap: wrap;
-    margin: 16px 0 14px;
+    margin: 18px 0 16px;
   }}
   .filter-group {{
     display: flex;
@@ -103,21 +101,25 @@ TEMPLATE = """<!DOCTYPE html>
     gap: 8px;
     flex-wrap: wrap;
   }}
-  .filter-label {{ color: var(--muted); font-size: .82em; }}
-  .filters {{ display: flex; gap: 8px; flex-wrap: wrap; }}
-  .filters button {{
-    border: 1px solid var(--line);
-    background: var(--card);
-    color: inherit;
+  .filter-label {{ color: var(--muted); font-size: 12px; }}
+  .filters {{
+    display: flex;
+    padding: 3px;
     border-radius: 999px;
-    padding: 6px 13px;
+    background: #1c1c20;
+  }}
+  .filters button {{
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 12px;
     cursor: pointer;
-    font-size: .85em;
+    font-size: 13px;
   }}
   .filters button.on {{
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--card));
+    background: var(--accent);
+    color: #fff;
   }}
   #player-box {{
     position: sticky;
@@ -126,100 +128,103 @@ TEMPLATE = """<!DOCTYPE html>
     margin-bottom: 14px;
     padding: 12px 14px;
     border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--card);
-    box-shadow: var(--shadow);
+    border-radius: 14px;
+    background: #1a1a1e;
   }}
   #player-box audio {{ width: 100%; display: block; }}
-  .play-title {{ font-weight: 650; margin-bottom: 8px; }}
-  .play-hint {{ font-size: .85em; color: var(--muted); margin-top: 8px; }}
+  .play-title {{ font-weight: 700; margin-bottom: 8px; }}
+  .play-hint {{ font-size: 13px; color: var(--muted); margin-top: 8px; }}
   .board {{
     background: var(--card);
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: var(--shadow);
   }}
   .board-head, .row {{
     display: grid;
-    grid-template-columns: 44px 58px minmax(0, 1.4fr) minmax(0, .9fr) 108px 44px;
-    gap: 8px;
+    grid-template-columns: 48px 64px minmax(0, 1.5fr) minmax(0, .9fr) 104px 44px;
+    gap: 10px;
     align-items: center;
-    padding: 12px 16px;
+    padding: 13px 16px;
   }}
   .board-head {{
-    color: var(--muted);
-    font-size: .78em;
+    color: #6f6f75;
+    font-size: 12px;
+    letter-spacing: .04em;
     border-bottom: 1px solid var(--line);
-    position: sticky;
-    top: 0;
-    background: var(--card);
-    z-index: 2;
+    background: #18181b;
   }}
-  .song {{
-    border-bottom: 1px solid var(--line);
-    cursor: pointer;
-  }}
+  .song {{ border-bottom: 1px solid var(--line); cursor: pointer; }}
   .song:last-child {{ border-bottom: 0; }}
-  .song:hover {{ background: color-mix(in srgb, var(--accent) 6%, var(--card)); }}
+  .song:hover {{ background: #1c1c20; }}
   .song.hidden {{ display: none; }}
   .c-rank, .c-score {{ font-variant-numeric: tabular-nums; }}
-  .c-rank {{ color: var(--muted); font-weight: 650; }}
-  .c-score {{ font-weight: 700; }}
-  .top3 .c-rank, .top3 .c-score {{ color: var(--gold); }}
+  .c-rank {{
+    color: #6f6f75;
+    font-size: 18px;
+    font-weight: 760;
+  }}
+  .c-score {{ font-size: 18px; font-weight: 780; }}
+  .top3 .c-rank {{ color: var(--accent); }}
+  .top3 .c-score {{ color: var(--gold); }}
   .name {{
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
-    font-weight: 650;
+    font-weight: 700;
   }}
   .name a {{ color: inherit; text-decoration: none; }}
   .name a:hover {{ color: var(--accent); }}
-  .artists, .sub {{ color: var(--muted); font-size: .86em; }}
+  .artists, .sub {{ color: var(--muted); font-size: 13px; }}
   .sub {{ display: none; margin-top: 4px; }}
-  .c-date {{ color: var(--muted); font-size: .82em; }}
+  .c-date {{ color: var(--muted); font-size: 12px; }}
   .c-date .collected {{ display: block; }}
   .badge {{
     display: inline-block;
-    font-size: .68em;
+    font-size: 10px;
     font-weight: 700;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 1px 7px;
-    color: var(--muted);
+    border-radius: 4px;
+    padding: 1px 6px;
+    background: #2a2a30;
+    color: #c8c8ce;
   }}
-  .badge.vip {{ border-color: var(--vip); color: var(--vip); }}
+  .badge.vip {{ background: #3a2612; color: var(--vip); }}
   button.play {{
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border: 0;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
   }}
-  button.play:hover {{ filter: brightness(1.08); }}
-  .detail {{
-    padding: 0 16px 12px 16px;
+  button.play:hover {{ filter: brightness(1.12); }}
+  .detail {{ padding: 0 16px 14px; }}
+  .parts {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .parts span {{
+    background: #1c1c20;
+    border-radius: 8px;
+    padding: 5px 8px;
     color: var(--muted);
+    font-size: 12px;
   }}
-  .parts {{ display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: .85em; }}
-  .parts b {{ color: var(--ink); font-variant-numeric: tabular-nums; }}
+  .parts b {{ color: var(--ink); margin-left: 6px; font-variant-numeric: tabular-nums; }}
   .foot {{
     color: var(--muted);
-    font-size: .8em;
+    font-size: 12px;
     margin-top: 22px;
-    max-width: 70ch;
+    max-width: 68ch;
   }}
-  a {{ color: var(--accent); }}
+  a {{ color: #ff7a7a; }}
   @media (max-width: 760px) {{
-    .wrap {{ width: min(100% - 20px, 920px); padding-top: 16px; }}
-    .hero, .board {{ border-radius: 16px; }}
+    .wrap {{ width: min(100% - 18px, 980px); padding-top: 20px; }}
+    .hero {{ display: block; }}
+    .meta {{ max-width: none; text-align: left; margin-top: 10px; }}
     .board-head, .c-score, .c-artists, .c-date {{ display: none; }}
     .row {{
-      grid-template-columns: 32px minmax(0, 1fr) 40px;
+      grid-template-columns: 36px minmax(0, 1fr) 38px;
       padding: 12px;
     }}
     .sub {{ display: block; }}
@@ -435,10 +440,10 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         parts = []
         for key, label in PARTS:
             if key in detail:
-                parts.append(f"{label} <b>{float(detail[key]):.1f}</b>")
+                parts.append(f"<span>{label}<b>{float(detail[key]):.1f}</b></span>")
         if detail.get("is_live"):
-            parts.append(f"Live 降权 ×{detail.get('live_penalty', 0.78)}")
-        parts_html = " · ".join(parts) or "暂无分项明细"
+            parts.append(f"<span>Live 降权<b>×{detail.get('live_penalty', 0.78)}</b></span>")
+        parts_html = "".join(parts) or "<span>暂无分项明细</span>"
         cards.append(
             f'<article class="{cls}" data-live="{1 if is_live else 0}" data-age="{age}">'
             f'<div class="row">'
