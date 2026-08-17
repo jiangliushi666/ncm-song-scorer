@@ -32,69 +32,222 @@ TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ncm-scorer · 网易云新歌爆款潜力榜</title>
 <style>
-  :root {{ color-scheme: light dark; }}
+  :root {{
+    color-scheme: light dark;
+    --bg: #f4f1ea;
+    --card: #fffcf6;
+    --ink: #1d1c19;
+    --muted: #6f6b62;
+    --line: #e4dfd4;
+    --accent: #1a7f56;
+    --gold: #b8860b;
+    --vip: #b26a00;
+    --shadow: 0 10px 30px #1d1c1912;
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{
+      --bg: #161513;
+      --card: #1f1e1b;
+      --ink: #f3efe6;
+      --muted: #a39d90;
+      --line: #333029;
+      --accent: #3dba84;
+      --gold: #e0b84e;
+      --vip: #e09a3e;
+      --shadow: 0 10px 30px #0008;
+    }}
+  }}
+  * {{ box-sizing: border-box; }}
   body {{
-    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-    max-width: 860px; margin: 0 auto; padding: 24px 16px 64px;
-    line-height: 1.6;
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
   }}
-  h1 {{ font-size: 1.4em; margin-bottom: 4px; }}
-  .meta {{ color: #888; font-size: .85em; margin-bottom: 14px; }}
-  .filters {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }}
+  .wrap {{
+    width: min(920px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 28px 0 72px;
+  }}
+  .hero {{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 22px 22px 18px;
+    box-shadow: var(--shadow);
+  }}
+  .kicker {{
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: .75em;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }}
+  h1 {{
+    margin: 0 0 8px;
+    font-size: clamp(1.35rem, 4vw, 1.85rem);
+    letter-spacing: -.02em;
+  }}
+  .meta {{ margin: 0; color: var(--muted); font-size: .88em; }}
+  .toolbar {{
+    display: flex;
+    align-items: center;
+    gap: 10px 14px;
+    flex-wrap: wrap;
+    margin: 16px 0 14px;
+  }}
+  .filter-label {{ color: var(--muted); font-size: .82em; }}
+  .filters {{ display: flex; gap: 8px; flex-wrap: wrap; }}
   .filters button {{
-    border: 1px solid #8886; background: transparent; color: inherit;
-    border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: .85em;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: inherit;
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+    font-size: .85em;
   }}
-  .filters button.on {{ border-color: #2b7; color: #2b7; }}
-  table {{ border-collapse: collapse; width: 100%; font-size: .95em; }}
-  th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #8884; }}
-  th {{ position: sticky; top: 0; background: inherit; backdrop-filter: blur(4px); }}
-  td.score {{ font-variant-numeric: tabular-nums; font-weight: 600; }}
-  tr.top3 td.score {{ color: #e6a817; }}
-  tr.song {{ cursor: pointer; }}
-  tr.song:hover {{ background: #8881; }}
-  tr.hidden {{ display: none; }}
-  .badge {{
-    display: inline-block; font-size: .7em; font-weight: 600;
-    border: 1px solid #8886; border-radius: 4px; padding: 0 5px;
-    margin-left: 6px; color: #888; vertical-align: middle;
+  .filters button.on {{
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--card));
   }}
-  button.play {{
-    border: 1px solid #8886; background: transparent; color: inherit;
-    border-radius: 50%; width: 28px; height: 28px; cursor: pointer;
-    font-size: 12px; line-height: 1;
+  #player-box {{
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: var(--shadow);
   }}
-  button.play:hover {{ border-color: #2b7; color: #2b7; }}
-  .badge.vip {{ border-color: #c90; color: #c90; }}
-  #player-box {{ margin-bottom: 14px; padding: 10px 12px; border: 1px solid #8884; border-radius: 10px; }}
   #player-box audio {{ width: 100%; display: block; }}
-  .play-title {{ font-weight: 600; margin-bottom: 8px; }}
-  .play-hint {{ font-size: .85em; color: #888; margin-top: 8px; }}
-  .parts {{ display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: .85em; color: #888; }}
-  .parts b {{ color: inherit; font-variant-numeric: tabular-nums; }}
-  .foot {{ color: #888; font-size: .8em; margin-top: 28px; }}
-  a {{ color: #2b7; }}
+  .play-title {{ font-weight: 650; margin-bottom: 8px; }}
+  .play-hint {{ font-size: .85em; color: var(--muted); margin-top: 8px; }}
+  .board {{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }}
+  .board-head, .row {{
+    display: grid;
+    grid-template-columns: 44px 58px minmax(0, 1.4fr) minmax(0, .9fr) 108px 44px;
+    gap: 8px;
+    align-items: center;
+    padding: 12px 16px;
+  }}
+  .board-head {{
+    color: var(--muted);
+    font-size: .78em;
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    z-index: 2;
+  }}
+  .song {{
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+  }}
+  .song:last-child {{ border-bottom: 0; }}
+  .song:hover {{ background: color-mix(in srgb, var(--accent) 6%, var(--card)); }}
+  .song.hidden {{ display: none; }}
+  .c-rank, .c-score {{ font-variant-numeric: tabular-nums; }}
+  .c-rank {{ color: var(--muted); font-weight: 650; }}
+  .c-score {{ font-weight: 700; }}
+  .top3 .c-rank, .top3 .c-score {{ color: var(--gold); }}
+  .name {{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-weight: 650;
+  }}
+  .name a {{ color: inherit; text-decoration: none; }}
+  .name a:hover {{ color: var(--accent); }}
+  .artists, .sub {{ color: var(--muted); font-size: .86em; }}
+  .sub {{ display: none; margin-top: 4px; }}
+  .c-date {{ color: var(--muted); font-size: .82em; }}
+  .c-date .collected {{ display: block; }}
+  .badge {{
+    display: inline-block;
+    font-size: .68em;
+    font-weight: 700;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 7px;
+    color: var(--muted);
+  }}
+  .badge.vip {{ border-color: var(--vip); color: var(--vip); }}
+  button.play {{
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+  }}
+  button.play:hover {{ filter: brightness(1.08); }}
+  .detail {{
+    padding: 0 16px 12px 16px;
+    color: var(--muted);
+  }}
+  .parts {{ display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: .85em; }}
+  .parts b {{ color: var(--ink); font-variant-numeric: tabular-nums; }}
+  .foot {{
+    color: var(--muted);
+    font-size: .8em;
+    margin-top: 22px;
+    max-width: 70ch;
+  }}
+  a {{ color: var(--accent); }}
+  @media (max-width: 760px) {{
+    .wrap {{ width: min(100% - 20px, 920px); padding-top: 16px; }}
+    .hero, .board {{ border-radius: 16px; }}
+    .board-head, .c-score, .c-artists, .c-date {{ display: none; }}
+    .row {{
+      grid-template-columns: 32px minmax(0, 1fr) 40px;
+      padding: 12px;
+    }}
+    .sub {{ display: block; }}
+    .detail {{ padding-left: 12px; padding-right: 12px; }}
+  }}
 </style>
 </head>
 <body>
-<h1>🎵 网易云新歌爆款潜力榜</h1>
-<div class="meta">更新于 {updated} · 打分模型：{model} · 数据源：网易云音乐新歌榜 · 由 GitHub Actions 每日自动更新</div>
-<div class="filters" id="filters">
-  <button type="button" data-filter="all" class="on">全部</button>
-  <button type="button" data-filter="studio">隐藏 Live</button>
-  <button type="button" data-filter="week">近 7 天</button>
+<div class="wrap">
+<header class="hero">
+  <p class="kicker">ncm-scorer</p>
+  <h1>新歌爆款潜力榜</h1>
+  <p class="meta">更新于 {updated} · {model} · 数据来自网易云音乐新歌榜，每日自动更新</p>
+</header>
+<div class="toolbar">
+  <span class="filter-label">显示</span>
+  <div class="filters" id="filters">
+    <button type="button" data-filter="all" class="on">全部歌曲</button>
+    <button type="button" data-filter="studio">不含 Live</button>
+    <button type="button" data-filter="week">近 7 天发行</button>
+  </div>
 </div>
 <div id="player-box" hidden></div>
-<table>
-<thead><tr><th>#</th><th>分数</th><th>歌曲</th><th>歌手</th><th>发布日期</th><th>采集时间</th><th></th></tr></thead>
-<tbody>
-{rows}
-</tbody>
-</table>
+<div class="board">
+  <div class="board-head">
+    <span>#</span><span>分数</span><span>歌曲</span><span>歌手</span><span>日期</span><span></span>
+  </div>
+  {rows}
+</div>
 <div class="foot">
   {foot}
-  ▶ 点按钮在本页播放。点击行可展开分项明细。仅个人研究用途，数据归网易云音乐所有。
+  点 ▶ 在本页播放，点歌曲行可看分数构成。仅个人研究用途，数据归网易云音乐所有。
   项目：<a href="https://github.com/jiangliushi666/ncm-song-scorer">ncm-song-scorer</a>
+</div>
 </div>
 <script>
   var box = document.getElementById('player-box');
@@ -115,7 +268,6 @@ TEMPLATE = """<!DOCTYPE html>
     box.hidden = false;
     box.innerHTML = '<div class="play-title"></div><div class="play-hint">正在取播放地址…</div>';
     box.querySelector('.play-title').textContent = name || ('歌曲 ' + id);
-    // 国内打不开 workers.dev；外链由浏览器直连 music.163.com，用听的人自己的 IP 取 CDN。
     var outer = 'https://music.163.com/song/media/outer/url?id=' + id + '.mp3';
     showAudio(outer, name, id, function () {{
       if (!PLAY_API) {{ fail(name, id); return; }}
@@ -140,29 +292,25 @@ TEMPLATE = """<!DOCTYPE html>
       return;
     }}
     if (e.target.closest('a')) return;
-    var song = e.target.closest('tr.song');
+    var song = e.target.closest('.song');
     if (!song) return;
-    var next = song.nextElementSibling;
-    if (next && next.classList.contains('detail')) next.hidden = !next.hidden;
+    var detail = song.querySelector('.detail');
+    if (detail) detail.hidden = !detail.hidden;
   }});
-  var filter = 'all';
   document.getElementById('filters').addEventListener('click', function (e) {{
     var b = e.target.closest('button[data-filter]');
     if (!b) return;
-    filter = b.getAttribute('data-filter');
+    var filter = b.getAttribute('data-filter');
     Array.prototype.forEach.call(document.querySelectorAll('#filters button'), function (x) {{
       x.classList.toggle('on', x === b);
     }});
-    Array.prototype.forEach.call(document.querySelectorAll('tr.song'), function (tr) {{
-      var live = tr.getAttribute('data-live') === '1';
-      var age = Number(tr.getAttribute('data-age') || 999);
+    Array.prototype.forEach.call(document.querySelectorAll('.song'), function (card) {{
+      var live = card.getAttribute('data-live') === '1';
+      var age = Number(card.getAttribute('data-age') || 999);
       var hide = (filter === 'studio' && live) || (filter === 'week' && age > 7);
-      tr.classList.toggle('hidden', hide);
-      var d = tr.nextElementSibling;
-      if (d && d.classList.contains('detail')) {{
-        d.classList.toggle('hidden', hide);
-        if (hide) d.hidden = true;
-      }}
+      card.classList.toggle('hidden', hide);
+      var d = card.querySelector('.detail');
+      if (d && hide) d.hidden = true;
     }});
   }});
 </script>
@@ -230,7 +378,7 @@ def build(db_path: str, out_path: str, top_n: int = 50,
     if not rows:
         raise SystemExit("数据库中还没有打分记录，先运行 daily")
 
-    trs = []
+    cards = []
     for i, r in enumerate(rows, start=1):
         song_id = int(r.get("song_id") or 0)
         name = str(r.get("name") or "")
@@ -249,17 +397,11 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         if is_vip:
             badges.append('<span class="badge vip">VIP</span>')
         badge = "".join(badges)
-        cls = ' class="song top3"' if i <= 3 else ' class="song"'
-        song_link = (
-            f'<a href="https://music.163.com/song?id={song_id}" '
-            f'target="_blank" rel="noopener">{html.escape(name)}</a>{badge}'
-        )
-        play_title = "本页播放"
+        cls = "song top3" if i <= 3 else "song"
         play_btn = (
             f'<button class="play" data-id="{song_id}" data-fee="{int(fee or 0)}" '
             f'data-name="{html.escape(name)}" '
-            f'aria-label="播放 {html.escape(name)}" '
-            f'title="{play_title}">▶</button>'
+            f'aria-label="播放 {html.escape(name)}" title="本页播放">▶</button>'
         )
         detail = _parse_detail(r.get("detail"))
         parts = []
@@ -269,19 +411,28 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         if detail.get("is_live"):
             parts.append(f"Live 降权 ×{detail.get('live_penalty', 0.78)}")
         parts_html = " · ".join(parts) or "暂无分项明细"
-        trs.append(
-            f'<tr{cls} data-live="{1 if is_live else 0}" data-age="{age}">'
-            f'<td>{i}</td><td class="score">{score:.1f}</td>'
-            f"<td>{song_link}</td><td>{artists}</td>"
-            f"<td>{published}</td><td>{collected}</td><td>{play_btn}</td></tr>\n"
-            f'<tr class="detail" hidden><td colspan="7"><div class="parts">{parts_html}</div></td></tr>'
+        cards.append(
+            f'<article class="{cls}" data-live="{1 if is_live else 0}" data-age="{age}">'
+            f'<div class="row">'
+            f'<div class="c-rank">{i}</div>'
+            f'<div class="c-score">{score:.1f}</div>'
+            f'<div class="c-song"><div class="name">'
+            f'<a href="https://music.163.com/song?id={song_id}" target="_blank" '
+            f'rel="noopener">{html.escape(name)}</a>{badge}</div>'
+            f'<div class="sub">{artists} · {score:.1f} · {published}</div></div>'
+            f'<div class="c-artists artists">{artists}</div>'
+            f'<div class="c-date">{published}<span class="collected">采集 {collected}</span></div>'
+            f'<div class="c-play">{play_btn}</div>'
+            f'</div>'
+            f'<div class="detail" hidden><div class="parts">{parts_html}</div></div>'
+            f'</article>'
         )
     updated = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     page = TEMPLATE.format(
         updated=updated,
         model=html.escape(model_label),
         play_api=json.dumps(play_api or ""),
-        rows="\n".join(trs),
+        rows="\n".join(cards),
         foot=foot,
         ldjson=json.dumps(
             {"name": "ncm-scorer ranking", "updated": updated,
