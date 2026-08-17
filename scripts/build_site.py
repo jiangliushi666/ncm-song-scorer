@@ -93,9 +93,15 @@ TEMPLATE = """<!DOCTYPE html>
   .toolbar {{
     display: flex;
     align-items: center;
-    gap: 10px 14px;
+    gap: 10px 18px;
     flex-wrap: wrap;
     margin: 16px 0 14px;
+  }}
+  .filter-group {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }}
   .filter-label {{ color: var(--muted); font-size: .82em; }}
   .filters {{ display: flex; gap: 8px; flex-wrap: wrap; }}
@@ -228,12 +234,20 @@ TEMPLATE = """<!DOCTYPE html>
   <h1>新歌爆款潜力榜</h1>
   <p class="meta">更新于 {updated} · {model} · 数据来自网易云音乐新歌榜，每日自动更新</p>
 </header>
-<div class="toolbar">
-  <span class="filter-label">显示</span>
-  <div class="filters" id="filters">
-    <button type="button" data-filter="all" class="on">全部歌曲</button>
-    <button type="button" data-filter="studio">不含 Live</button>
-    <button type="button" data-filter="week">近 7 天发行</button>
+<div class="toolbar" id="filters">
+  <div class="filter-group" data-group="time">
+    <span class="filter-label">时间</span>
+    <div class="filters">
+      <button type="button" data-time="all" class="on">不限时间</button>
+      <button type="button" data-time="week">近 7 天</button>
+    </div>
+  </div>
+  <div class="filter-group" data-group="live">
+    <span class="filter-label">类型</span>
+    <div class="filters">
+      <button type="button" data-live="all" class="on">含 Live</button>
+      <button type="button" data-live="studio">不含 Live</button>
+    </div>
   </div>
 </div>
 <div id="player-box" hidden></div>
@@ -297,21 +311,35 @@ TEMPLATE = """<!DOCTYPE html>
     var detail = song.querySelector('.detail');
     if (detail) detail.hidden = !detail.hidden;
   }});
-  document.getElementById('filters').addEventListener('click', function (e) {{
-    var b = e.target.closest('button[data-filter]');
-    if (!b) return;
-    var filter = b.getAttribute('data-filter');
-    Array.prototype.forEach.call(document.querySelectorAll('#filters button'), function (x) {{
-      x.classList.toggle('on', x === b);
-    }});
+  var timeFilter = 'all';
+  var liveFilter = 'all';
+  function applyFilters() {{
     Array.prototype.forEach.call(document.querySelectorAll('.song'), function (card) {{
       var live = card.getAttribute('data-live') === '1';
       var age = Number(card.getAttribute('data-age') || 999);
-      var hide = (filter === 'studio' && live) || (filter === 'week' && age > 7);
+      var hide = (timeFilter === 'week' && age > 7) || (liveFilter === 'studio' && live);
       card.classList.toggle('hidden', hide);
       var d = card.querySelector('.detail');
       if (d && hide) d.hidden = true;
     }});
+  }}
+  document.getElementById('filters').addEventListener('click', function (e) {{
+    var timeBtn = e.target.closest('button[data-time]');
+    var liveBtn = e.target.closest('button[data-live]');
+    if (timeBtn) {{
+      timeFilter = timeBtn.getAttribute('data-time');
+      Array.prototype.forEach.call(document.querySelectorAll('button[data-time]'), function (x) {{
+        x.classList.toggle('on', x === timeBtn);
+      }});
+    }} else if (liveBtn) {{
+      liveFilter = liveBtn.getAttribute('data-live');
+      Array.prototype.forEach.call(document.querySelectorAll('button[data-live]'), function (x) {{
+        x.classList.toggle('on', x === liveBtn);
+      }});
+    }} else {{
+      return;
+    }}
+    applyFilters();
   }});
 </script>
 <script type="application/ld+json">{ldjson}</script>
