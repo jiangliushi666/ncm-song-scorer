@@ -179,8 +179,7 @@ TEMPLATE = """<!DOCTYPE html>
   .name a:hover {{ color: var(--accent); }}
   .artists, .sub {{ color: var(--muted); font-size: 13px; }}
   .sub {{ display: none; margin-top: 4px; }}
-  .c-date {{ color: var(--muted); font-size: 12px; }}
-  .c-date .collected {{ display: block; }}
+  .c-date {{ color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }}
   .badge {{
     display: inline-block;
     font-size: 10px;
@@ -259,7 +258,7 @@ TEMPLATE = """<!DOCTYPE html>
 <div id="player-box" hidden></div>
 <div class="board">
   <div class="board-head">
-    <span>#</span><span>分数</span><span>歌曲</span><span>歌手</span><span>日期</span><span></span>
+    <span>#</span><span>分数</span><span>歌曲</span><span>歌手</span><span>发布</span><span></span>
   </div>
   {rows}
 </div>
@@ -357,13 +356,8 @@ TEMPLATE = """<!DOCTYPE html>
 def _fmt_publish(ms) -> str:
     if not ms:
         return "—"
-    return time.strftime("%Y-%m-%d", time.gmtime(int(ms) / 1000))
-
-
-def _fmt_collected(ts) -> str:
-    if not ts:
-        return "—"
-    return time.strftime("%m-%d %H:%M", time.gmtime(int(ts)))
+    # 网易云 publishTime 按北京时间日期，用 UTC 会错一天
+    return time.strftime("%Y-%m-%d", time.gmtime(int(ms) / 1000 + 8 * 3600))
 
 
 def _age_days(publish_ms) -> int:
@@ -419,7 +413,6 @@ def build(db_path: str, out_path: str, top_n: int = 50,
         artists = html.escape(str(r.get("artists") or ""))
         score = float(r.get("score") or 0)
         published = html.escape(_fmt_publish(r.get("publish_time")))
-        collected = html.escape(_fmt_collected(r.get("ts")))
         flags = title_flags(name)
         is_live = flags["is_live"] or bool(_parse_detail(r.get("detail")).get("is_live"))
         age = _age_days(r.get("publish_time"))
@@ -453,9 +446,9 @@ def build(db_path: str, out_path: str, top_n: int = 50,
             f'<div class="c-song"><div class="name">'
             f'<a href="https://music.163.com/song?id={song_id}" target="_blank" '
             f'rel="noopener">{html.escape(name)}</a>{badge}</div>'
-            f'<div class="sub">{artists} · {score:.1f} · {published}</div></div>'
+            f'<div class="sub">{artists} · {score:.1f} · 发布 {published}</div></div>'
             f'<div class="c-artists artists">{artists}</div>'
-            f'<div class="c-date">{published}<span class="collected">采集 {collected}</span></div>'
+            f'<div class="c-date">{published}</div>'
             f'<div class="c-play">{play_btn}</div>'
             f'</div>'
             f'<div class="detail" hidden><div class="parts">{parts_html}</div></div>'
